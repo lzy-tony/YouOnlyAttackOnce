@@ -1,0 +1,13 @@
+# images
+*.png
+*.jpg
+
+# models
+*.pt
+*.pth
+
+# results
+runs/
+saves/
+imgs/
+submission/
