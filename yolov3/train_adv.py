@@ -8,6 +8,7 @@ Usage:
 import argparse
 from logging import root
 import os
+import json
 import random
 import sys
 import time
@@ -151,7 +152,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
    
     compute_loss = ComputeLoss(model)  # init loss class
 
-    dataset = LoadImages(opt.source)
+    # load data
+    # image dataset
+    dataset = LoadImages(opt.img_source)
+
+    with open(opt.label_source, "r") as file:
+        label_dict = json.load(file)
 
     # get targets
     targets = opt.targets.split(',')
@@ -159,100 +165,130 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         targets[i] = eval(targets[i])
     print(targets)
 
+    # patch size
     patch_height = 1260
     patch_width = 2790
+    # yolo input size
     im_height = 384
     im_width = 640
+    # video image size
+    read_height = 1080
+    read_width = 1920
+    # calc pad offsets
+    r = min(im_height / read_height, im_width / read_width)
+    r = min(r, 1.0)
+    new_read_height, new_read_width = int(round(read_height * r)), int(round(read_width * r))
+    dh, dw = im_height - new_read_height, im_width - new_read_width
+    dh /= 2
+    dw /= 2
+
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mask = torch.ones((3, patch_height, patch_width)).to(device)
     
 
     for epoch in range(opt.steps):
         model.eval()
-        print(f"evaluating epoch {epoch}")
-        for _, im, im0s, _, _ in dataset:
-            # im: processed image, im0s: pre image
-            im = torch.from_numpy(im).to(device)
-        
-            im = im.float()  # uint8 to fp16/32
-            im /= 255  # 0 - 255 to 0.0 - 1.0
-
-            noise.requires_grad = True
-
-            # TODO, read from config
-            ux = 150
-            uy = 126
-            dx = 223
-            dy = 296
-
-            if len(im.shape) == 3:
-                im = im[None]  # expand for batch dim
-            print(im.shape)
-
-            transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
-            im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-            patch = transform_kernel(noise * mask)
-
-            print(patch.shape)
-            print(im.shape)
-            p2d = (uy, im_width - dy, ux, im_height - dx)
-            pad_patch = F.pad(patch, p2d, "constant", 0)
-            im_mask = F.pad(im_mask, p2d, "constant", 0)
-            print(pad_patch.shape)
-            print(im.shape)
-
+        img_cnt = torch.zeros(1, device=device, requires_grad=False)
+        avg_grad = torch.zeros_like(noise, device=device, requires_grad=False)
+        for i, (path, im, im0s, _, _) in enumerate(dataset):
+            try:
+                # im: processed image, im0s: pre image
+                
+                split_path = path.split('/')
+                ty, tx, tw, th = label_dict[split_path[-1]]
+                im = torch.from_numpy(im).to(device)
             
-            adv_im = im * (1 - im_mask) + im_mask * pad_patch
+                im = im.float()  # uint8 to fp16/32
+                im /= 255  # 0 - 255 to 0.0 - 1.0
 
-            out_im = adv_im.clone().detach()
-            out_im = out_im * 255
-            out_im = out_im.round()
-            out_im = out_im / 255
+                print(f"===================evaluating epoch{epoch}, image {i}===================")
 
-            adv_out = out_im * 255
-            print(adv_out.shape)
-            out = adv_out.clone().round().detach().cpu().numpy().squeeze()
-            out = out.transpose(1, 2, 0).astype('uint8')
-            print(out.shape)
-            # cv2.imwrite(os.getcwd() + f"/saves/adv_{epoch}.png", out, [cv2.IMWRITE_PNG_COMPRESSION, 0])
-            Image.fromarray(out).save(f"./saves/adv_{epoch}.png")
+                noise.requires_grad = True
 
-            pred = model(adv_im)
-            loss = compute_loss(pred, targets) # do loss
+                # read from config
+                ux = int(round(dh + tx * r))
+                uy = int(round(dw + ty * r))
+                dx = int(round(dh + (tx + th) * r))
+                dy = int(round(dw + (ty + tw) * r))
 
-            grad = torch.autograd.grad(loss, noise,
-                                        retain_graph=False, create_graph=False)[0]
+                if len(im.shape) == 3:
+                    im = im[None]  # expand for batch dim
+                print(im.shape)
+
+                transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
+                im_mask = torch.ones((dx - ux, dy - uy)).to(device)
+                patch = transform_kernel(noise * mask)
+
+                p2d = (uy, im_width - dy, ux, im_height - dx)
+                pad_patch = F.pad(patch, p2d, "constant", 0)
+                im_mask = F.pad(im_mask, p2d, "constant", 0)
+                
+                adv_im = im * (1 - im_mask) + im_mask * pad_patch
+
+                out_im = adv_im.clone().detach()
+                out_im = out_im * 255
+                out_im = out_im.round()
+                out_im = out_im / 255
+
+                adv_out = out_im * 255
+                print(adv_out.shape)
+                out = adv_out.clone().round().detach().cpu().numpy().squeeze()
+                out = out.transpose(1, 2, 0).astype('uint8')
+                print(out.shape)
+                # cv2.imwrite(os.getcwd() + f"/saves/adv_{epoch}.png", out, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+                if i % 20 == 0:
+                    Image.fromarray(out).save(f"./saves/adv_im_epoch_{epoch}_{i}.png")
+
+                pred = model(adv_im)
+                loss = compute_loss(pred, targets) # do loss
+
+                grad = torch.autograd.grad(loss, noise,
+                                            retain_graph=False, create_graph=False)[0]
+                img_cnt = img_cnt + 1
+                avg_grad = avg_grad + grad
+
+                noise = noise.detach()
+            
+            except:
+                pass
+
+            if i % opt.batch_size == opt.batch_size - 1 and img_cnt.item() != 0:
+                avg_grad = avg_grad / img_cnt
+                print(torch.norm(avg_grad))
+                noise = noise.detach() - opt.alpha * avg_grad.sign()
+                noise = torch.clamp(noise, min=0, max=1)
+                avg_grad = torch.zeros_like(noise, device=device, requires_grad=False)
         
-            noise = noise.detach() - opt.alpha * grad.sign()
-            noise = torch.clamp(noise, min=0, max=1)
     
-    noise_im = noise.clone().detach()
-    noise_im = noise_im * 255
-    noise_np = noise_im.clone().round().detach().cpu().numpy().squeeze()
-    noise_np = noise_np.transpose(1, 2, 0).astype('uint8')
-    Image.fromarray(noise_np).save(f"./submission/sub1/texture.png")
+        noise_im = noise.clone().detach()
+        noise_im = noise_im * 255
+        noise_np = noise_im.clone().round().detach().cpu().numpy().squeeze()
+        noise_np = noise_np.transpose(1, 2, 0).astype('uint8')
+        Image.fromarray(noise_np).save(f"./submission/sub4/texture_{epoch}.png")
 
-    mask_im = mask.clone().detach()
-    mask_im = mask_im * 255
-    mask_np = mask_im.clone().round().detach().cpu().numpy().squeeze()
-    mask_np = mask_np.transpose(1, 2, 0).astype('uint8')
-    Image.fromarray(mask_np).save(f"./submission/sub1/mask.png")
+        mask_im = mask.clone().detach()
+        mask_im = mask_im * 255
+        mask_np = mask_im.clone().round().detach().cpu().numpy().squeeze()
+        mask_np = mask_np.transpose(1, 2, 0).astype('uint8')
+        Image.fromarray(mask_np).save(f"./submission/sub4/mask_{epoch}.png")
 
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     
     # for adv optimization
-    parser.add_argument("--alpha", type=float, default="5e-3",
+    parser.add_argument("--alpha", type=float, default="5e-2",
                         help="size of gradient update")
     parser.add_argument("--model", type=str, default="yolov3",
                         choices=["yolov3"], help="white box model to attack")
-    parser.add_argument("--steps", type=int, default=30,
+    parser.add_argument("--steps", type=int, default=50,
                         help="number of iterations to attack")
-    parser.add_argument("--source", type=str, default="imgs/transformed_sample.png")
-    parser.add_argument("--eps", type=float, default="1e-1")
+    parser.add_argument("--img_source", type=str, default="../datasets/image",
+                        help="image source")
+    parser.add_argument("--label_source", type=str, default="../datasets/loc.json",
+                        help="patch location")
     parser.add_argument("--targets", type=str, default="2,5,7",
-                        help="targets to hide, currently car and truck")
+                        help="targets to hide, currently car, bus and truck")
     
     
     # for yolov3
@@ -261,7 +297,7 @@ def parse_opt(known=False):
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=201)
-    parser.add_argument('--batch-size', type=int, default=24, help='total batch size for all GPUs, -1 for autobatch')
+    parser.add_argument('--batch_size', type=int, default=24, help='total batch size for all GPUs, -1 for autobatch')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')

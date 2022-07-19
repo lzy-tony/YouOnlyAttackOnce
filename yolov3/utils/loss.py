@@ -128,7 +128,6 @@ class ComputeLoss:
         for i, pi in enumerate(p):  # layer index, layer predictions
             # image, anchor, gridy, gridx
             tobj = torch.zeros(pi.shape[:4], dtype=pi.dtype, device=self.device)  # target obj
-            print(tobj.shape)
 
             for a in range(pi.shape[0]):
                 for b in range(pi.shape[1]):
