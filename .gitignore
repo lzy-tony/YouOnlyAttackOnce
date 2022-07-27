@@ -12,3 +12,6 @@ saves/
 imgs/
 submission/
 gen_weights/
+
+# cache
+__pycache__
