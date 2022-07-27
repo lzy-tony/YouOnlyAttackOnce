@@ -111,3 +111,53 @@ class DataLoader:
             imgs.append(img)
             labels.append(label)
         return imgs, labels
+
+
+class Dataset:
+    def __init__(self,
+                 img_path="datasets/image", label_path="datasets/loc.json",
+                 img_size=640):
+        p = str(Path(img_path).resolve())  # os-agnostic absolute path
+        if '*' in p:
+            files = sorted(glob.glob(p, recursive=True))  # glob
+        elif os.path.isdir(p):
+            files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+        elif os.path.isfile(p):
+            files = [p]  # files
+        else:
+            raise Exception(f'ERROR: {p} does not exist')
+        with open(label_path, "r") as file:
+            label_dict = json.load(file)
+
+        self.images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS]
+        self.img_size = img_size
+        self.label_dict = label_dict
+        self.nf = len(label_dict)
+    
+    def __iter__(self):
+        self.count = 0
+        self.imgidx = 0
+        return self
+    
+    def __len__(self):
+        return self.nf
+    
+    def __next__(self):
+        if self.count == self.nf:
+            raise StopIteration
+        else:
+            split_path = self.images[self.imgidx].split('/')
+            while split_path[-1] not in self.label_dict:
+                imgidx += 1
+                split_path = self.images[self.imgidx].split('/')
+            self.count += 1
+
+            path = self.images[self.imgidx]
+            img0 = cv2.imread(path) # BGR
+            assert img0 is not None, f'Image Not Found {path}'
+
+            img = letterbox(img0, self.img_size)[0]
+            img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+            img = np.ascontiguousarray(img)
+
+            return img, self.labels[split_path[-1]]
