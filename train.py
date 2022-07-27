@@ -1,0 +1,131 @@
+import argparse
+
+import torch
+from torch import nn, optim, tensor
+from torch.nn import functional as F
+
+from unet import Unet
+from util.dataloader import DataLoader
+from util.load_detector import load_yolo
+from util.loss import VanillaLoss
+from util.tensor2img import tensor2img
+
+
+def parse_opt():
+    parser = argparse.ArgumentParser()
+    
+    # GAN
+    parser.add_argument("--lr", type=float, default=5e-7, help="initial learning rate")
+    parser.add_argument("--device", type=str, default="cuda:3", help="cuda device")
+    parser.add_argument("--iters", type=int, default=1000, help="iterations to update GAN")
+
+    # training data
+    parser.add_argument("--frames", type=int, default=4, help="number of frames per scene")
+    parser.add_argument("--scenes", type=int, default=5, help="number of scenes in training data")
+    parser.add_argument("--targets", type=str, default="2,5,7",
+                        help="targets to hide, currently car, bus and truck")
+
+    opt = parser.parse_args()
+    return opt
+
+
+def train(opt):
+    # load models
+    device = opt.device
+    model = load_yolo(device=opt.device).to(opt.device)
+    netG = Unet(input_nc=4, output_nc=3, num_downs=7, 
+                output_h=1260, output_w=2790, frames=opt.frames*opt.scenes,
+                ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False).to(device)
+    optimizer = optim.Adam(netG.parameters(), lr=opt.lr, betas=(0.5, 0.999))
+    compute_loss = VanillaLoss(model)
+    dataloader = DataLoader(scenes=opt.scenes, frames=opt.frames)
+
+    # get targets
+    targets = opt.targets.split(',')
+    for i, _ in enumerate(targets):
+        targets[i] = eval(targets[i])
+    # patch size
+    patch_height = 1260
+    patch_width = 2790
+    # yolo input size
+    im_height = 384
+    im_width = 640
+    # video image size
+    read_height = 1080
+    read_width = 1920
+    # calc pad offsets
+    r = min(im_height / read_height, im_width / read_width)
+    r = min(r, 1.0)
+    new_read_height, new_read_width = int(round(read_height * r)), int(round(read_width * r))
+    dh, dw = im_height - new_read_height, im_width - new_read_width
+    dh /= 2
+    dw /= 2
+
+    mask = torch.ones((3, patch_height, patch_width)).to(device)
+
+    for i in range(opt.iters):
+        print(f"==================== evaluating iteration {i} ====================")
+        model.eval()
+        optimizer.zero_grad()
+        # image data
+        img_list, label_list = dataloader.get_images()
+        im_mask_list = [] # list of tensors
+        im_list = [] # list of tensors
+        offset_list = []
+        augmented_im_list = [] # list of tensors
+
+        # preprocess before sending into GAN
+        for im, label in zip(img_list, label_list):
+            ty, tx, tw, th = label
+
+            ux = int(round(dh + tx * r))
+            uy = int(round(dw + ty * r))
+            dx = int(round(dh + (tx + th) * r))
+            dy = int(round(dw + (ty + tw) * r))
+            offset_list.append((ux, uy, dx, dy))
+
+            im = torch.from_numpy(im).to(device)            
+            im = im.float()  # uint8 to fp16/32
+            im /= 255  # 0 - 255 to 0.0 - 1.0
+            im_list.append(im)
+
+            im_mask = torch.ones((dx - ux, dy - uy)).to(device)
+            p2d = (uy, im_width - dy, ux, im_height - dx)
+            im_mask = F.pad(im_mask, p2d, "constant", 0)
+            im_mask_list.append(im_mask)
+            im_mask = torch.unsqueeze(im_mask, 0)
+
+            augmented_im = torch.cat((im, im_mask), dim=0)
+            augmented_im_list.append(augmented_im)
+        gan_input = torch.stack(augmented_im_list)
+
+        # transforms for GAN to obtain patched images
+        noise = netG(gan_input)
+        adv_im_list = []
+        for im, im_mask, offset in zip(im_list, im_mask_list, offset_list):
+            ux, uy, dx, dy = offset
+            transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
+            patch = transform_kernel(noise * mask)
+            p2d = (uy, im_width - dy, ux, im_height - dx)
+            pad_patch = F.pad(patch, p2d, "constant", 0)
+            adv_im = im * (1 - im_mask) + im_mask * pad_patch
+            adv_im_list.append(adv_im)
+        detector_input = torch.stack(adv_im_list)
+        
+        # evaluate loss, update GAN
+        pred = model(detector_input)
+        loss = compute_loss(pred, targets)
+        print(loss)
+        loss.backward()
+        optimizer.step()
+
+        if i % 5 == 0:
+            tensor2img(noise, f"./submission/UnetGAN1/gan_loss_lobj1000_lcls1_lr5e-7_epoch{i}.png")
+            torch.save(netG.state_dict(), f"./gen_weights/0726_unetgan/0726_unetgan_lr5e-7vanilla.pth")
+            for idx, adv in enumerate(adv_im_list):
+                tensor2img(adv, f"./saves/adv_lr5e-7_im_{idx}.png")
+
+
+if __name__ == '__main__':
+    opt = parse_opt()
+    train(opt)
