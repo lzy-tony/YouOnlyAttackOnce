@@ -71,16 +71,18 @@ class Unet(nn.Module):
         self.unetgen = UnetGenerator(input_nc=input_nc, output_nc=output_nc, num_downs=num_downs, 
                                      ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False)
         self.alf_layer = alf_def(kernel_size=55, pad=28)
-        self.dim_reduction = nn.Conv2d(frames*output_nc, output_nc, 1)
-        self.upsample_kernel = nn.AdaptiveAvgPool2d((output_h, output_w))
+        # self.dim_reduction = nn.Conv2d(frames*output_nc, output_nc, 1)
+        # self.upsample_kernel = nn.AdaptiveAvgPool2d((output_h, output_w))
     
     def forward(self, input):
-        unet_out = self.unetgen(input) # P x C x H x W
+        # unet_out = self.unetgen(input) # P x C x H x W
+        unet_out = self.unetgen(input) # C x H x W
         gf_out = self.alf_layer(unet_out)
-        reshape_out = gf_out.view(-1, gf_out.shape[-2], gf_out.shape[-1])
-        dim_reduction_out = self.dim_reduction(reshape_out)
-        out = self.upsample_kernel(dim_reduction_out)
-        out = torch.tanh(out) / 2 + 0.5 # to [0, 1]
+        # reshape_out = gf_out.view(-1, gf_out.shape[-2], gf_out.shape[-1])
+        # dim_reduction_out = self.dim_reduction(reshape_out)
+        # out = self.upsample_kernel(dim_reduction_out)
+        # out = torch.tanh(out) / 2 + 0.5 # to [0, 1]
+        out = torch.tanh(gf_out) / 2 + 0.5
         return out
 
 

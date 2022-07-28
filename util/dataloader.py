@@ -5,6 +5,7 @@ import json
 import cv2
 import numpy as np
 from pathlib import Path
+from torch.utils.data import Dataset, DataLoader
 
 
 IMG_FORMATS = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng', 'webp', 'mpo']  # acceptable image suffixes
@@ -79,7 +80,7 @@ class Cluster:
 
         return img, self.labels[idx]
 
-
+'''
 class DataLoader:
     def __init__(self,
                  scenes=5, frames=6,
@@ -148,7 +149,7 @@ class Dataset:
         else:
             split_path = self.images[self.imgidx].split('/')
             while split_path[-1] not in self.label_dict:
-                imgidx += 1
+                self.imgidx += 1
                 split_path = self.images[self.imgidx].split('/')
             self.count += 1
 
@@ -160,4 +161,43 @@ class Dataset:
             img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
             img = np.ascontiguousarray(img)
 
-            return img, self.labels[split_path[-1]]
+            self.imgidx += 1
+
+            return img, self.label_dict[split_path[-1]], split_path[-1]
+'''
+
+class ImageLoader(Dataset):
+    def __init__(self,
+                 img_path="datasets/image", label_path="datasets/loc.json",
+                 img_size=640):
+        p = str(Path(img_path).resolve())  # os-agnostic absolute path
+        if '*' in p:
+            files = sorted(glob.glob(p, recursive=True))  # glob
+        elif os.path.isdir(p):
+            files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+        elif os.path.isfile(p):
+            files = [p]  # files
+        else:
+            raise Exception(f'ERROR: {p} does not exist')
+        with open(label_path, "r") as file:
+            label_dict = json.load(file)
+
+        self.images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS and x.split('/')[-1] in label_dict]
+        self.img_size = img_size
+        self.label_dict = label_dict
+        self.nf = len(self.images)
+    
+    def __len__(self):
+        return self.nf
+
+    def __getitem__(self, index):
+        path = self.images[index]
+        img0 = cv2.imread(path) # BGR
+        split_path = self.images[index].split('/')
+        assert img0 is not None, f'Image Not Found {path}'
+
+        img = letterbox(img0, self.img_size)[0]
+        img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        img = np.ascontiguousarray(img)
+
+        return img, self.label_dict[split_path[-1]], split_path[-1]
