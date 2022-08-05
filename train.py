@@ -9,8 +9,9 @@ from torch.utils.data import DataLoader
 from unet import Unet
 from util.dataloader import ImageLoader
 from util.load_detector import load_yolo
-from util.loss import VanillaLoss, OriginalLoss
+from util.loss import VanillaLoss, OriginalLoss, Original_loss_gpu
 from util.tensor2img import tensor2img
+from generators.condgenerators import ConGeneratorResnet
 
 
 def parse_opt():
@@ -18,8 +19,8 @@ def parse_opt():
     
     # GAN
     parser.add_argument("--lr", type=float, default=5e-6, help="initial learning rate")
-    parser.add_argument("--device", type=str, default="cuda:1", help="cuda device")
-    parser.add_argument("--epochs", type=int, default=20000, help="epochs to train GAN")
+    parser.add_argument("--device", type=str, default="cuda:2", help="cuda device")
+    parser.add_argument("--epochs", type=int, default=5000, help="epochs to train GAN")
 
     # training data
     parser.add_argument("--frames", type=int, default=4, help="number of frames per scene")
@@ -39,10 +40,14 @@ def train(opt):
     netG = Unet(input_nc=3, output_nc=3, num_downs=7, 
                 output_h=1260, output_w=2790, frames=opt.frames*opt.scenes,
                 ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False).to(device)
-    # path = "./gen_weights/0729_unetgan/0729_unetgan_ps_epoch1000.pth"
-    # netG.load_state_dict(torch.load(path))
+
+    print(next(model.parameters()).device)
+    # netG = ConGeneratorResnet().to(opt.device)
+    # netG.load_state_dict(torch.load("./gen_weights/0803_resnetgan/0803_resnetgan_ps_epoch150.pth"))
+    netG.train()
+    print('generator create success')
     optimizer = optim.Adam(netG.parameters(), lr=opt.lr, betas=(0.5, 0.999))
-    compute_loss = VanillaLoss(model)
+    compute_loss = Original_loss_gpu(model)
     # compute_loss = OriginalLoss(model)
     dataset = ImageLoader()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
@@ -78,7 +83,7 @@ def train(opt):
         print(f"==================== evaluating epoch {epoch} ====================")
         model.eval()
         optimizer.zero_grad()
-        
+        total_loss = torch.zeros(1,device=device)
         '''
         # image data
         img_list, label_list = dataloader.get_images()
@@ -141,7 +146,8 @@ def train(opt):
         
         for batch, (img, label, name) in enumerate(tqdm(dataloader)):
             # gen patch
-            seed = torch.normal(mean=0.5, std=torch.full((1, 3, seed_height, seed_width), 0.5)).to(device)
+            seed = torch.normal(mean=0.5, std=torch.full((1, 3, 640, 1280), 0.5)).to(device)
+            # z_class_one_hot = torch.zeros(seed.size(0), 80).to(device)
             small_noise = netG(seed)
             noise = noise_kernel(small_noise)
 
@@ -173,18 +179,19 @@ def train(opt):
             
             adv_imgs = torch.stack(adv_im_list)
             pred = model(adv_imgs)
-            loss = compute_loss(pred, targets)
-            print(loss)
+            loss, _ = compute_loss(pred, targets)
+            total_loss += loss/100
             loss.backward()
             optimizer.step()
 
             if batch % 10 == 0:
                 for idx, adv in enumerate(adv_im_list):
-                    tensor2img(adv, f"./saves/adv_im_resize_batch_{batch}_{idx}.png")
-
-        tensor2img(noise, f"./submission/UnetGAN3/psgan_resize_epoch{epoch}.png")
+                    tensor2img(adv, f"./saves/adv_im2_batch_{batch}_{idx}.png")
+        print("total loss is",total_loss/130/8)
+        
+        tensor2img(noise, f"./submission/Unet4/psgan2_epoch{epoch}.png")
         if epoch % 50 == 0:
-            torch.save(netG.state_dict(), f"./gen_weights/0729_unetgan/0729_unetgan_ps_epoch{epoch}.pth")
+            torch.save(netG.state_dict(), f"./gen_weights/0805_unet/0804_resnetgan_ps_epoch{epoch}.pth")
         
 
 
