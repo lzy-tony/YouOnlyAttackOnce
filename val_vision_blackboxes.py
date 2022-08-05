@@ -1,9 +1,11 @@
+import argparse
 import glob
 import os
 import cv2
 from PIL import Image
 import numpy as np
 from pathlib import Path
+import torch
 from tqdm import tqdm
 
 import torchvision
@@ -34,6 +36,8 @@ def inference_fasterrcnn(input_tensor, model, device, detection_threshold):
     pred_labels = outputs[0]['labels'].cpu().numpy()
     pred_scores = outputs[0]['scores'].detach().cpu().numpy()
     pred_bboxes = outputs[0]['boxes'].detach().cpu().numpy()
+    # print(pred_classes)
+    # print(pred_scores)
 
     boxes, classes, labels, indices = [], [], [], []
     for index in range(len(pred_scores)):
@@ -43,6 +47,7 @@ def inference_fasterrcnn(input_tensor, model, device, detection_threshold):
             labels.append(pred_labels[index])
             indices.append(index)
     boxes = np.int32(boxes)
+    # print(classes)
     return boxes, classes, labels, indices
 
 
@@ -61,10 +66,16 @@ def draw_boxes(boxes, labels, classes, image):
     return image
 
 
-def val(target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
+def val(name, target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
+    print(f"evaluating {name}")
     device = "cuda:0"
 
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+    if name == "Faster-RCNN":
+        model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
+    if name == "RetinaNet":
+        model = torchvision.models.detection.retinanet_resnet50_fpn(weights=torchvision.models.detection.RetinaNet_ResNet50_FPN_Weights.DEFAULT)
+    if name == "FCOS":
+        model = torchvision.models.detection.fcos_resnet50_fpn(weights=torchvision.models.detection.FCOS_ResNet50_FPN_Weights.DEFAULT)
     model.eval().to(device)
 
     p = str(Path(image_dir).resolve())  # os-agnostic absolute path
@@ -95,12 +106,12 @@ def val(target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
         input_tensor = input_tensor.unsqueeze(0)
 
         boxes, classes, labels, indices = inference_fasterrcnn(input_tensor, model, device, 0.6)
+        # return
 
-
-        if i % 10 == 0:
-            image = draw_boxes(boxes, labels, classes, image)
-            # Show the image:
-            Image.fromarray(image).save(f"val_saves/test_{i}.png")
+        # if i % 10 == 0:
+        #     image = draw_boxes(boxes, labels, classes, image)
+        #     # Show the image:
+        #     Image.fromarray(image).save(f"val_saves/test_{i}.png")
 
 
         for c in classes:
@@ -114,10 +125,37 @@ def val(target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
         # Image.fromarray(image).save("test.png")
 
             
-    
-    print(f"evaulate result: {sum - fails} / {sum}")
+    print(f"{name}:")
+    print(f"result: {sum - fails} / {sum}")
     print(f"attack success rate {1 - fails / sum}")
 
 
+def run(opt):
+    model_list = []
+    if opt.faster_rcnn != 0:
+        model_list.append("Faster-RCNN")
+    if opt.retinanet != 0:
+        model_list.append("RetinaNet")
+    if opt.fcos != 0:
+        model_list.append("FCOS")
+    
+    for name in model_list:
+        val(name)
+
+
+def parse_opt():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--device", type=str, default="cuda:0", help="cuda device")
+    
+    # models
+    parser.add_argument("--faster_rcnn", type=int, default=1, help="val faster-rcnn")
+    parser.add_argument("--retinanet", type=int, default=1, help="val retinanet")
+    parser.add_argument("--fcos", type=int, default=1, help="val fcos")
+
+    opt = parser.parse_args()
+    return opt
+
+
 if __name__ == '__main__':
-    val()
+    opt = parse_opt()
+    run(opt)
