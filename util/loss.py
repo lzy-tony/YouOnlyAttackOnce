@@ -55,4 +55,31 @@ class OriginalLoss:
         print(cnt)
         print(lobj)
         print(lcls)
-        return lobj * 100 + lcls
+        return lobj * 100
+
+
+class Original_loss_gpu:
+    def __init__(self, model):
+        self.device = next(model.parameters()).device
+
+    def __call__(self, p, targets):  # predictions, targets
+        lobj = torch.zeros(1, device=self.device)
+        lcls = torch.zeros(1, device=self.device)
+        # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
+
+        # Losses
+        cnt = 0.0
+        for i, pi in enumerate(p):  # layer index, layer predictions
+            # image, anchor, gridy, gridx
+
+            pi = pi.view(-1, pi.shape[-1])
+            best_class = pi[...,5:].max(dim=1).values
+            mask = torch.zeros(pi.shape[0],device=self.device)
+            for w in targets:
+                m = (best_class==pi[...,5+w]).float()
+                lcls += (torch.sigmoid(pi[...,5+w])*m).sum()
+                mask += m
+            conf = torch.sigmoid(pi[...,4])
+            lobj += (mask*conf).sum()
+            cnt += float(mask.sum())
+        return lobj * 100, cnt

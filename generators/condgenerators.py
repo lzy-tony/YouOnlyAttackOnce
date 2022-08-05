@@ -137,7 +137,7 @@ class ConGeneratorResnet(nn.Module):
             self.alf_layer = alf_def(kernel_size=55, pad=28)
             
 
-    def forward(self, input, z_one_hot, eps=0.031):
+    def forward(self, input, z_one_hot):
         z_cond = self.snlinear(z_one_hot)
         if self.layer > 1:
             z_cond = self.snlinear2(z_cond)
@@ -182,10 +182,10 @@ class ConGeneratorResnet(nn.Module):
         if self.inception:
             x = self.crop(x)
         # scale noise
-        x = torch.tanh(x)
-        if self.alf:
-            x = self.alf_layer(x)
-        return x * eps
+        x = torch.tanh(x) / 2 + 0.5
+        # if self.alf:
+        #     x = self.alf_layer(x)
+        return x
 
 from torch.nn import BatchNorm2d
 
