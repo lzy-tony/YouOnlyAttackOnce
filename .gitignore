@@ -9,6 +9,7 @@
 # results
 runs/
 saves/
+val_saves/
 imgs/
 submission/
 gen_weights/

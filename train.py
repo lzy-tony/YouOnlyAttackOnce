@@ -25,9 +25,9 @@ def parse_opt():
     # training data
     parser.add_argument("--frames", type=int, default=4, help="number of frames per scene")
     parser.add_argument("--scenes", type=int, default=5, help="number of scenes in training data")
-    parser.add_argument("--batch_size", type=int, default=8, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=12, help="batch size")
     parser.add_argument("--targets", type=str, default="2,5,7",
-                        help="targets to hide, currently car, bus and truck")
+                        help="targets to hide, currently car, bus and truck") 
 
     opt = parser.parse_args()
     return opt
@@ -40,6 +40,7 @@ def train(opt):
     netG = Unet(input_nc=3, output_nc=3, num_downs=7, 
                 output_h=1260, output_w=2790, frames=opt.frames*opt.scenes,
                 ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False).to(device)
+
     print(next(model.parameters()).device)
     # netG = ConGeneratorResnet().to(opt.device)
     # netG.load_state_dict(torch.load("./gen_weights/0803_resnetgan/0803_resnetgan_ps_epoch150.pth"))
@@ -59,8 +60,8 @@ def train(opt):
     patch_height = 1260
     patch_width = 2790
     # seed size
-    seed_height = 640
-    seed_width = 1280
+    seed_height = 1280
+    seed_width = 2560
     # yolo input size
     im_height = 384
     im_width = 640
