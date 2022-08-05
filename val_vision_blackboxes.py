@@ -105,7 +105,7 @@ def val(name, target_class = ["car", "bus", "truck"], image_dir="./gen_results")
         input_tensor = input_tensor.to(device)
         input_tensor = input_tensor.unsqueeze(0)
 
-        boxes, classes, labels, indices = inference_fasterrcnn(input_tensor, model, device, 0.6)
+        boxes, classes, labels, indices = inference_fasterrcnn(input_tensor, model, device, 0.25)
         # return
 
         # if i % 10 == 0:
