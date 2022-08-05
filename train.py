@@ -17,16 +17,16 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     
     # GAN
-    parser.add_argument("--lr", type=float, default=5e-5, help="initial learning rate")
-    parser.add_argument("--device", type=str, default="cuda:3", help="cuda device")
-    parser.add_argument("--epochs", type=int, default=1000, help="epochs to train GAN")
+    parser.add_argument("--lr", type=float, default=5e-6, help="initial learning rate")
+    parser.add_argument("--device", type=str, default="cuda:1", help="cuda device")
+    parser.add_argument("--epochs", type=int, default=20000, help="epochs to train GAN")
 
     # training data
     parser.add_argument("--frames", type=int, default=4, help="number of frames per scene")
     parser.add_argument("--scenes", type=int, default=5, help="number of scenes in training data")
-    parser.add_argument("--batch_size", type=int, default=8, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=12, help="batch size")
     parser.add_argument("--targets", type=str, default="2,5,7",
-                        help="targets to hide, currently car, bus and truck")
+                        help="targets to hide, currently car, bus and truck") 
 
     opt = parser.parse_args()
     return opt
@@ -39,9 +39,11 @@ def train(opt):
     netG = Unet(input_nc=3, output_nc=3, num_downs=7, 
                 output_h=1260, output_w=2790, frames=opt.frames*opt.scenes,
                 ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False).to(device)
+    # path = "./gen_weights/0729_unetgan/0729_unetgan_ps_epoch1000.pth"
+    # netG.load_state_dict(torch.load(path))
     optimizer = optim.Adam(netG.parameters(), lr=opt.lr, betas=(0.5, 0.999))
-    # compute_loss = VanillaLoss(model)
-    compute_loss = OriginalLoss(model)
+    compute_loss = VanillaLoss(model)
+    # compute_loss = OriginalLoss(model)
     dataset = ImageLoader()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
 
@@ -53,8 +55,8 @@ def train(opt):
     patch_height = 1260
     patch_width = 2790
     # seed size
-    seed_height = 640
-    seed_width = 1280
+    seed_height = 1280
+    seed_width = 2560
     # yolo input size
     im_height = 384
     im_width = 640
@@ -178,11 +180,11 @@ def train(opt):
 
             if batch % 10 == 0:
                 for idx, adv in enumerate(adv_im_list):
-                    tensor2img(adv, f"./saves/adv_im2_batch_{batch}_{idx}.png")
+                    tensor2img(adv, f"./saves/adv_im_resize_batch_{batch}_{idx}.png")
 
-        tensor2img(noise, f"./submission/UnetGAN2/psgan2_epoch{epoch}.png")
+        tensor2img(noise, f"./submission/UnetGAN3/psgan_resize_epoch{epoch}.png")
         if epoch % 50 == 0:
-            torch.save(netG.state_dict(), f"./gen_weights/0728_unetgan/0728_unetgan_ps_epoch{epoch}.pth")
+            torch.save(netG.state_dict(), f"./gen_weights/0729_unetgan/0729_unetgan_ps_epoch{epoch}.pth")
         
 
 

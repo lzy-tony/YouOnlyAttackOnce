@@ -7,13 +7,14 @@ class VanillaLoss:
         h = model.hyp  # hyperparameters
         # Define criteria
         self.device = next(model.parameters()).device
+        self.BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=self.device))
         self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=self.device))
 
         self.balance = {3: [4.0, 1.0, 0.4]}.get(269, [4.0, 1.0, 0.25, 0.06, 0.02])  # P3-P7
 
     def __call__(self, p, targets):  # predictions, targets
         lobj = torch.zeros(1, device=self.device)
-        # lcls = torch.zeros(1, device=self.device)
+        lcls = torch.zeros(1, device=self.device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
 
         # Losses
@@ -21,12 +22,17 @@ class VanillaLoss:
             # image, anchor, gridy, gridx
 
             tobj = torch.zeros_like(pi[..., 0], device=self.device)
-            lobj += self.BCEobj(pi[..., 4], tobj) * self.balance[i]
+            tcls = torch.zeros_like(pi[..., 5:], device=self.device)
+            lobj += self.BCEobj(pi[..., 4], tobj)
+            lcls += self.BCEcls(pi[..., 5:], tcls)
 
         bs = tobj.shape[0]  # batch size
+        lcls *= 10
         lobj *= 10
-        print(lobj * bs)
-        return lobj * bs
+        print("lcls: ", lcls)
+        print("lobj: ", lobj)
+        print((lcls + lobj) * bs)
+        return (lcls + lobj) * bs
 
 
 class OriginalLoss:
