@@ -94,21 +94,20 @@ def train(opt):
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 adv_im = adv_im.unsqueeze(dim=0)
                 
-                # grayscale_cam = cam(input_tensor=adv_im, targets=targets)
-                # grayscale_cam = grayscale_cam[0, :]
+                grayscale_cam = cam(input_tensor=adv_im, targets=targets)
+                grayscale_cam = grayscale_cam[0, :]
 
-                # loss = compute_loss(grayscale_cam)
+                loss = compute_loss(grayscale_cam)
 
                 # gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
                 # gre = gre.detach().cpu().numpy()
                 # Image.fromarray(gre.astype('uint8')).save("gray.png")
 
-                grayscale_cam = cam(input_tensor=adv_im, targets=targets)
-                grayscale_cam = grayscale_cam[0, :]
-                loss = grayscale_cam.sum()
+                # grayscale_cam = cam(input_tensor=adv_im, targets=targets)
+                # grayscale_cam = grayscale_cam[0, :]
 
                 print("pre grad")
-                grad = torch.autograd.grad(loss, noise,
+                grad = torch.autograd.grad(loss, adv_im,
                                             retain_graph=False, create_graph=False)[0]
                 print(grad)
                 return

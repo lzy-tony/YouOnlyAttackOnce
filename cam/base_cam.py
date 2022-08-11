@@ -138,7 +138,7 @@ class BaseCAM:
                                      layer_grads.cuda(),
                                      eigen_smooth)
             
-            cam = torch.clamp(cam,0)
+            cam = torch.clamp(cam, 0)
             cam = cam - torch.min(cam)
             cam = cam / (1e-7 + torch.max(cam))
             scaled = torchvision.transforms.Resize((384,640))(cam)

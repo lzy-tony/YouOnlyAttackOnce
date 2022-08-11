@@ -21,7 +21,8 @@ class GradCAMPlusPlus(BaseCAM):
         grads_power_3 = grads_power_2 * grads
         # Equation 19 in https://arxiv.org/abs/1710.11063
         sum_activations = torch.sum(activations, axis=(2, 3))
-        eps = 0.000001
+        # eps = 0.000001
+        eps = 1
         aij = grads_power_2 / (2 * grads_power_2 +
                                sum_activations[:, :, None, None] * grads_power_3 + eps)
         # Now bring back the ReLU from eq.7 in the paper,
