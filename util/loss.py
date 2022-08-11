@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 class VanillaLoss:
@@ -102,3 +103,20 @@ class Faster_RCNN_loss:
                     l += _scores[i][j]
         
         return l
+
+
+class AttentionTransferLoss:
+    def __init__(self):
+        self.device = "cuda"
+
+        im_height, im_width = 384, 640
+        h1, h2, w1, w2 = 150, 300, 150, 500
+        m = torch.ones((1, h2 - h1, w2 - w1))
+        p2d = (w1, im_width - w2, h1, im_height - h2)
+        mask = F.pad(m, p2d, "constant", -0.1)
+        self.mask = mask.to(self.device)
+    
+    def __call__(self, grayscale_cam):
+        loss = (grayscale_cam * self.mask).sum()
+        print(loss)
+        return loss

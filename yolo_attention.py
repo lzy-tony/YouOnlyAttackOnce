@@ -3,12 +3,15 @@ import numpy as np
 from PIL import Image
 import requests
 import torchvision
+from torch.nn import functional as F
 # from cam.ablation_cam_multilayer import AblationCAM
 # from pytorch_grad_cam import AblationCAM, EigenCAM, GradCAMPlusPlus
 from cam.grad_cam_plusplus import GradCAMPlusPlus
 from pytorch_grad_cam.utils.model_targets import FasterRCNNBoxScoreTarget
 from pytorch_grad_cam.ablation_layer import AblationLayer,AblationLayerFasterRCNN
 from pytorch_grad_cam.utils.image import show_cam_on_image, scale_accross_batch_and_channels, scale_cam_image
+
+from util.tensor2img import tensor2img
 
 
 def load_yolo(model_type='yolov3_spp', device="cuda:0"):
@@ -98,15 +101,67 @@ def exp_attention():
     cam = GradCAMPlusPlus(model,target_layers,use_cuda=
                           torch.cuda.is_available(),
                           reshape_transform=Yolo_transform)
+    print(img.shape)
     grayscale_cam = cam(input_tensor=img/255, targets=targets)
     grayscale_cam = grayscale_cam[0,:]
 
+    print(grayscale_cam.shape)
     gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
     gre = gre.detach().cpu().numpy()
+    # ul (150, 150)
+    gre[150, 150, 0] = 255
+    gre[150, 150, 1] = 0
+    gre[150, 150, 2] = 0
+    gre[150, 151, 0] = 255
+    gre[150, 151, 1] = 0
+    gre[150, 151, 2] = 0
+    gre[151, 150, 0] = 255
+    gre[151, 150, 1] = 0
+    gre[151, 150, 2] = 0
+    gre[151, 151, 0] = 255
+    gre[151, 151, 1] = 0
+    gre[151, 151, 2] = 0
+
+    #ur 150, 500
+    gre[150, 500, 0] = 0
+    gre[150, 500, 1] = 255
+    gre[150, 500, 2] = 0
+    gre[150, 501, 0] = 0
+    gre[150, 501, 1] = 255
+    gre[150, 501, 2] = 0
+    gre[151, 500, 0] = 0
+    gre[151, 500, 1] = 255
+    gre[151, 500, 2] = 0
+    gre[151, 501, 0] = 0
+    gre[151, 501, 1] = 255
+    gre[151, 501, 2] = 0
+
+    # dl (300, 150)
+    gre[300, 150, 0] = 0
+    gre[300, 150, 1] = 0
+    gre[300, 150, 2] = 255
+    gre[300, 151, 0] = 0
+    gre[300, 151, 1] = 0
+    gre[300, 151, 2] = 255
+    gre[301, 150, 0] = 0
+    gre[301, 150, 1] = 0
+    gre[301, 150, 2] = 255
+    gre[301, 151, 0] = 0
+    gre[301, 151, 1] = 0
+    gre[301, 151, 2] = 255
+
     print(gre.max())
     Image.fromarray(gre.astype('uint8')).save("gray2.png")
     rm = img.squeeze(0).detach().cpu().numpy().transpose(1,2,0)
     Image.fromarray((0.5*gre + 0.5*rm).astype('uint8')).save("demo2.png")
     
+    im_height, im_width = 384, 640
+    h1, h2, w1, w2 = 150, 300, 150, 500
+    m = torch.ones((3, h2 - h1, w2 - w1))
+    p2d = (w1, im_width - w2, h1, im_height - h2)
+    pad_mask = F.pad(m, p2d, "constant", 0)
+    print(pad_mask.shape)
+    tensor2img(pad_mask, "mask.png")
 
-exp_attention()    
+
+exp_attention()

@@ -2,19 +2,18 @@ import os
 import sys
 import argparse
 from tqdm import tqdm
+from PIL import Image
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-sys.path.append("./frcnn")
-
-from util.load_detector import load_yolo, load_frcnn
+from util.load_detector import load_yolo
+from util.load_cam import load_yolo_gradplusplus
 from util.dataloader import ImageLoader
-from util.loss import Faster_RCNN_loss
-from frcnn.model import FasterRCNNVGG16
-from frcnn.trainer import FasterRCNNTrainer
+from util.loss import AttentionTransferLoss
+from util.tensor2img import tensor2img
 
 
 def parse_opt():
@@ -34,8 +33,8 @@ def parse_opt():
 def train(opt):
     device = opt.device
     dataset = ImageLoader()
-    frcnn_loss = Faster_RCNN_loss()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
+    compute_loss = AttentionTransferLoss()
 
     # patch size
     patch_height = 1260
@@ -59,19 +58,19 @@ def train(opt):
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mask = torch.ones((3, patch_height, patch_width)).to(device)
+    grad = torch.zeros_like(noise, device=device)
 
-    frcnn, frcnn_trainer = load_frcnn()
+    yolo = load_yolo(device=device)
+    cam, targets = load_yolo_gradplusplus(yolo)
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
 
         for batch, (img, label, name) in enumerate(tqdm(dataloader)):
-            frcnn.train()
             noise.requires_grad = True
 
             tyt, txt, twt, tht = label
             img = img.to(device)
-            adv_im_list = []
             
             for i in range(img.shape[0]):
                 im = img[i]
@@ -94,21 +93,28 @@ def train(opt):
 
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 adv_im = adv_im.unsqueeze(dim=0)
-                adv_im_list.append(adv_im)
-            
-            _bboxes, _labels, _scores = frcnn_trainer.faster_rcnn.predict(adv_im_list)
-            total_loss = frcnn_loss(_bboxes, _labels, _scores)
-            print(total_loss)
-            if(total_loss == 0):
-                continue
+                
+                # grayscale_cam = cam(input_tensor=adv_im, targets=targets)
+                # grayscale_cam = grayscale_cam[0, :]
 
-            grad = torch.autograd.grad(total_loss, noise,
-                                        retain_graph=False, create_graph=False)[0]
-            
-            noise = noise.detach() - opt.alpha - grad.sign()
-            noise = torch.clamp(noise, min=0, max=1)
+                # loss = compute_loss(grayscale_cam)
 
-            torch.cuda.empty_cache()
+                # gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
+                # gre = gre.detach().cpu().numpy()
+                # Image.fromarray(gre.astype('uint8')).save("gray.png")
+
+                grayscale_cam = cam(input_tensor=adv_im, targets=targets)
+                grayscale_cam = grayscale_cam[0, :]
+                loss = grayscale_cam.sum()
+
+                print("pre grad")
+                grad = torch.autograd.grad(loss, noise,
+                                            retain_graph=False, create_graph=False)[0]
+                print(grad)
+                return
+            
+            # noise = noise.detach() - opt.alpha - grad.sign()
+            # noise = torch.clamp(noise, min=0, max=1)
 
 
 if __name__ == '__main__':
