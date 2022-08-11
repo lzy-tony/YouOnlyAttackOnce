@@ -89,3 +89,16 @@ class Original_loss_gpu:
             lobj += (mask*conf).sum()
             cnt += float(mask.sum())
         return lobj * 100, cnt
+
+class Faster_RCNN_loss:
+    def __init__(self):
+        self.device = "cuda"
+
+    def __call__(self, _bboxes, _labels, _scores):
+        l = torch.zeros(1, device=self.device)
+        for i, labels in enumerate(_labels):
+            for j, label in enumerate(labels):
+                if label == 5 or label == 6:
+                    l += _scores[i][j]
+        
+        return l
