@@ -1,50 +1,18 @@
-from matplotlib.pyplot import axis
 import numpy as np
 import torch
-import cv2
-from typing import List, Callable, Tuple
-from torch import nn
-
-from cam.activations_and_gradients import ActivationsAndGradients
-
-
-class ClassifierOutputTarget:
-    def __init__(self, category):
-        self.category = category
-
-    def __call__(self, model_output):
-        if len(model_output.shape) == 1:
-            return model_output[self.category]
-        return model_output[:, self.category]
-
-
-def scale_cam_image(cam, target_size=None):
-    result = []
-    for img in cam:
-        # img = img - np.min(img)
-        # img = img / (1e-7 + np.max(img))
-        # if target_size is not None:
-        #     img = cv2.resize(img, target_size)
-        # result.append(img)
-        img = img - torch.min(img)
-        img = img / (1e-7 + torch.max(img))
-        if target_size is not None:
-            # kernel = nn.AdaptiveAvgPool2d(target_size)
-            # img = kernel(torch.unsqueeze(img, 0))
-            upsample = nn.Upsample(size=target_size, mode='bilinear', align_corners=False)
-            img = upsample(torch.unsqueeze(torch.unsqueeze(img, 0), 0))
-            img = torch.squeeze(img)
-        result.append(img)
-    # result = np.float32(result)
-    result = torch.stack(result)
-
-    return result
+import torchvision
+import ttach as tta
+from typing import Callable, List, Tuple
+from pytorch_grad_cam.activations_and_gradients import ActivationsAndGradients
+from pytorch_grad_cam.utils.svd_on_activations import get_2d_projection
+from pytorch_grad_cam.utils.image import scale_cam_image
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 
 class BaseCAM:
     def __init__(self,
-                 model: nn.Module,
-                 target_layers: List[nn.Module],
+                 model: torch.nn.Module,
+                 target_layers: List[torch.nn.Module],
                  use_cuda: bool = False,
                  reshape_transform: Callable = None,
                  compute_input_gradient: bool = False,
@@ -59,20 +27,43 @@ class BaseCAM:
         self.uses_gradients = uses_gradients
         self.activations_and_grads = ActivationsAndGradients(
             self.model, target_layers, reshape_transform)
-  
+
+    """ Get a vector of weights for every channel in the target layer.
+        Methods that return weights channels,
+        will typically need to only implement this function. """
+
+    def get_cam_weights(self,
+                        input_tensor: torch.Tensor,
+                        target_layers: List[torch.nn.Module],
+                        targets: List[torch.nn.Module],
+                        activations: torch.Tensor,
+                        grads: torch.Tensor) -> torch.Tensor:
+        raise Exception("Not Implemented")
+
     def get_cam_image(self,
                       input_tensor: torch.Tensor,
-                      target_layer: nn.Module,
-                      targets: List[nn.Module],
+                      target_layer: torch.nn.Module,
+                      targets: List[torch.nn.Module],
                       activations: torch.Tensor,
                       grads: torch.Tensor,
-                      eigen_smooth: bool = False) -> torch.Tensor:
-        raise Exception("Not Implemented")
+                      eigen_smooth: bool = False) -> np.ndarray:
+
+        weights = self.get_cam_weights(input_tensor,
+                                       target_layer,
+                                       targets,
+                                       activations,
+                                       grads)
+        weighted_activations = weights[:, :, None, None] * activations
+        if eigen_smooth:
+            cam = get_2d_projection(weighted_activations)
+        else:
+            cam = weighted_activations.sum(axis=1)
+        return cam
 
     def forward(self,
                 input_tensor: torch.Tensor,
-                targets: List[nn.Module],
-                eigen_smooth: bool = False) -> torch.Tensor:
+                targets: List[torch.nn.Module],
+                eigen_smooth: bool = False) -> np.ndarray:
 
         if self.cuda:
             input_tensor = input_tensor.cuda()
@@ -81,29 +72,18 @@ class BaseCAM:
             input_tensor = torch.autograd.Variable(input_tensor,
                                                    requires_grad=True)
 
-        model_out = self.activations_and_grads(input_tensor)
-
-        if isinstance(model_out, tuple):
-            outputs = model_out[0]
-        else:
-            outputs = model_out
-
-        print(outputs.shape)
+        outputs = self.activations_and_grads(input_tensor)
         if targets is None:
-            # target_categories = np.argmax(outputs[..., 5:].cpu().data.numpy(), axis=-1) + 5
             target_categories = np.argmax(outputs.cpu().data.numpy(), axis=-1)
-            target_categories = np.full_like(target_categories, 7)
-            
-            print(target_categories[..., :200])
-            # target_categories = torch.argmax(outputs, axis=-1)
-            print(target_categories.shape)
             targets = [ClassifierOutputTarget(
                 category) for category in target_categories]
 
         if self.uses_gradients:
             self.model.zero_grad()
-            loss = sum([target(output)
-                       for target, output in zip(targets, outputs)])
+            # loss = sum([target(output)
+            #            for target, output in zip(targets, outputs)])
+            ######################################## modified in ######################################
+            loss = targets[0](outputs)
             loss.backward(retain_graph=True)
 
         # In most of the saliency attribution papers, the saliency is
@@ -118,26 +98,27 @@ class BaseCAM:
         cam_per_layer = self.compute_cam_per_layer(input_tensor,
                                                    targets,
                                                    eigen_smooth)
+        ### cam_per_layer 是 一个list，包含一个ndarray，要改为tensor
         return self.aggregate_multi_layers(cam_per_layer)
 
-    def get_target_height_width(self,
+    def get_target_width_height(self,
                                 input_tensor: torch.Tensor) -> Tuple[int, int]:
         width, height = input_tensor.size(-1), input_tensor.size(-2)
-        return height, width
+        return width, height
 
     def compute_cam_per_layer(
             self,
             input_tensor: torch.Tensor,
-            targets: List[nn.Module],
-            eigen_smooth: bool) -> torch.Tensor:
+            targets: List[torch.nn.Module],
+            eigen_smooth: bool) -> List:
         # activations_list = [a.cpu().data.numpy()
         #                     for a in self.activations_and_grads.activations]
+        activations_list = self.activations_and_grads.activations
+        # for 
         # grads_list = [g.cpu().data.numpy()
         #               for g in self.activations_and_grads.gradients]
-        activations_list = self.activations_and_grads.activations
         grads_list = self.activations_and_grads.gradients
-        
-        target_size = self.get_target_height_width(input_tensor)
+        target_size = self.get_target_width_height(input_tensor)
 
         cam_per_target_layer = []
         # Loop over the saliency image from every layer
@@ -153,31 +134,68 @@ class BaseCAM:
             cam = self.get_cam_image(input_tensor,
                                      target_layer,
                                      targets,
-                                     layer_activations,
-                                     layer_grads,
+                                     layer_activations.cuda(),
+                                     layer_grads.cuda(),
                                      eigen_smooth)
-            # cam = np.maximum(cam, 0)
-            cam = torch.maximum(cam, torch.zeros_like(cam))
-            scaled = scale_cam_image(cam, target_size)
+            
+            cam = torch.clamp(cam,0)
+            cam = cam - torch.min(cam)
+            cam = cam / (1e-7 + torch.max(cam))
+            scaled = torchvision.transforms.Resize((384,640))(cam)
+            # scaled = scale_cam_image(cam, target_size)
             cam_per_target_layer.append(scaled[:, None, :])
 
         return cam_per_target_layer
 
     def aggregate_multi_layers(
             self,
-            cam_per_target_layer: List[torch.Tensor]) -> torch.Tensor:
+            cam_per_target_layer: List) -> torch.Tensor:
         # cam_per_target_layer = np.concatenate(cam_per_target_layer, axis=1)
         # cam_per_target_layer = np.maximum(cam_per_target_layer, 0)
         # result = np.mean(cam_per_target_layer, axis=1)
-        cam_per_target_layer = torch.cat(cam_per_target_layer, dim=1)
-        cam_per_target_layer = torch.maximum(cam_per_target_layer, torch.zeros_like(cam_per_target_layer))
-        result = torch.mean(cam_per_target_layer, dim=1)
-        return scale_cam_image(result)
+        # return scale_cam_image(result)
+        return cam_per_target_layer[0]
+
+    def forward_augmentation_smoothing(self,
+                                       input_tensor: torch.Tensor,
+                                       targets: List[torch.nn.Module],
+                                       eigen_smooth: bool = False) -> np.ndarray:
+        transforms = tta.Compose(
+            [
+                tta.HorizontalFlip(),
+                tta.Multiply(factors=[0.9, 1, 1.1]),
+            ]
+        )
+        cams = []
+        for transform in transforms:
+            augmented_tensor = transform.augment_image(input_tensor)
+            cam = self.forward(augmented_tensor,
+                               targets,
+                               eigen_smooth)
+
+            # The ttach library expects a tensor of size BxCxHxW
+            cam = cam[:, None, :, :]
+            cam = torch.from_numpy(cam)
+            cam = transform.deaugment_mask(cam)
+
+            # Back to numpy float32, HxW
+            cam = cam.numpy()
+            cam = cam[:, 0, :, :]
+            cams.append(cam)
+
+        cam = np.mean(np.float32(cams), axis=0)
+        return cam
 
     def __call__(self,
                  input_tensor: torch.Tensor,
-                 targets: List[nn.Module] = None,
-                 eigen_smooth: bool = False) -> np.ndarray:
+                 targets: List[torch.nn.Module] = None,
+                 aug_smooth: bool = False,
+                 eigen_smooth: bool = False) -> torch.Tensor:
+
+        # Smooth the CAM result with test time augmentation
+        if aug_smooth is True:
+            return self.forward_augmentation_smoothing(
+                input_tensor, targets, eigen_smooth)
 
         return self.forward(input_tensor,
                             targets, eigen_smooth)
