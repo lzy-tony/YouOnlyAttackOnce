@@ -118,5 +118,4 @@ class AttentionTransferLoss:
     
     def __call__(self, grayscale_cam):
         loss = (grayscale_cam * self.mask).sum()
-        print(loss / 10)
-        return loss / 10
+        return loss

@@ -11,6 +11,7 @@ runs/
 saves/
 val_saves/
 imgs/
+heatmap/
 submission/
 gen_weights/
 gen_results/

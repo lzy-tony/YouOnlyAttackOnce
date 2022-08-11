@@ -21,7 +21,7 @@ def parse_opt():
 
     parser.add_argument("--alpha", type=float, default="5e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=50, help="number of epochs to attack")
-    parser.add_argument("--batch-size", type=int, default=4, help="batch size")
+    parser.add_argument("--batch-size", type=int, default=12, help="batch size")
     parser.add_argument("--device", type=str, default="cuda:1", help="device")
 
     opt = parser.parse_args()
@@ -58,7 +58,6 @@ def train(opt):
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mask = torch.ones((3, patch_height, patch_width)).to(device)
-    grad = torch.zeros_like(noise, device=device)
 
     yolo = load_yolo(device=device)
     cam, targets = load_yolo_gradplusplus(yolo)
@@ -71,6 +70,8 @@ def train(opt):
 
             tyt, txt, twt, tht = label
             img = img.to(device)
+
+            grad = torch.zeros_like(noise, device=device)
             
             for i in range(img.shape[0]):
                 im = img[i]
@@ -106,14 +107,22 @@ def train(opt):
                 # grayscale_cam = cam(input_tensor=adv_im, targets=targets)
                 # grayscale_cam = grayscale_cam[0, :]
 
-                print("pre grad")
-                grad = torch.autograd.grad(loss, adv_im,
+                grad_ = torch.autograd.grad(loss, noise,
                                             retain_graph=False, create_graph=False)[0]
-                print(grad)
-                return
+                if not torch.isnan(grad_[0, 0, 0]):
+                    grad += grad_
+                
+                if batch % 10 == 0:
+                    tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
+                    gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
+                    gre = gre.detach().cpu().numpy()
+                    Image.fromarray(gre.astype('uint8')).save(f"./heatmap/adv_im_{batch}_{i}.png")
             
-            # noise = noise.detach() - opt.alpha - grad.sign()
-            # noise = torch.clamp(noise, min=0, max=1)
+            noise = noise.detach() - opt.alpha * grad.sign()
+            noise = torch.clamp(noise, min=0, max=1)
+
+        
+        tensor2img(noise, f"./submission/pgd_attention/pgd_attention_epoch{epoch}.png")
 
 
 if __name__ == '__main__':
