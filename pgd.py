@@ -10,9 +10,11 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from util.load_detector import load_yolo
+sys.path.append("./frcnn")
+
+from util.load_detector import load_frcnn, load_yolo
 from util.dataloader import ImageLoader
-from util.loss import Original_loss_gpu
+from util.loss import Faster_RCNN_loss, Original_loss_gpu
 from util.tensor2img import tensor2img
 
 
@@ -34,8 +36,9 @@ def train(opt):
     device = opt.device
     dataset = ImageLoader()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
-    yolo = load_yolo(device=device)
-    compute_loss = Original_loss_gpu(yolo)
+    # yolo = load_yolo(device=device)
+    frcnn = load_frcnn(device=device)
+    frcnn_loss = Faster_RCNN_loss()
 
     # patch size
     patch_height = 1260
@@ -58,18 +61,18 @@ def train(opt):
     dw /= 2
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
-    # mask = torch.ones((3, patch_height, patch_width)).to(device)
-    mask = torch.ones((3, int(patch_height / 2), int(patch_width / 2))).to(device)
-    pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
-    mask = F.pad(mask, pmask, "constant", 0)
+    mask = torch.ones((3, patch_height, patch_width)).to(device)
+    # mask = torch.ones((3, int(patch_height / 2), int(patch_width / 2))).to(device)
+    # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
+    # mask = F.pad(mask, pmask, "constant", 0)
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
 
-        for batch, (img, label, name) in enumerate(tqdm(dataloader)):
+        for batch, (img, pos, name) in enumerate(tqdm(dataloader)):
             noise.requires_grad = True
 
-            tyt, txt, twt, tht = label
+            tyt, txt, twt, tht = pos
             img = img.to(device)
 
             grad = torch.zeros_like(noise, device=device)
@@ -99,8 +102,11 @@ def train(opt):
 
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 
-                pred = yolo(adv_im)
-                loss, _ = compute_loss(pred)
+                # pred = yolo(adv_im)
+                # loss, _ = compute_loss(pred)
+                adv_im = adv_im.unsqueeze(dim=0)
+                label, confidence, bboxes = frcnn.detect_image(adv_im, crop = False, count = False, pil = False)
+                loss = frcnn_loss(bboxes, label, confidence)
 
                 grad_ = torch.autograd.grad(loss, noise,
                                             retain_graph=False, create_graph=False)[0]
@@ -108,14 +114,14 @@ def train(opt):
                     grad += grad_
                 
                 if batch % 10 == 0:
-                    tensor2img(adv_im, f"./saves/adv_im2_{batch}_{i}.png")
+                    tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
             
             noise = noise.detach() - opt.alpha * grad.sign()
             noise = torch.clamp(noise, min=0, max=1)
 
         
-        tensor2img(noise, f"./submission/pgd_small/pgd_small_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_small/mask.png")
+        tensor2img(noise, f"./submission/pgd_frcnn/pgd_small_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_frcnn/mask.png")
 
 
 if __name__ == '__main__':

@@ -101,13 +101,16 @@ class Faster_RCNN_loss:
     def __init__(self):
         self.device = "cuda"
 
-    def __call__(self, _bboxes, _labels, _scores):
+    def __call__(self, _bboxes, _labels, _scores, targets=[5, 6]):
         l = torch.zeros(1, device=self.device)
         for i, labels in enumerate(_labels):
-            for j, label in enumerate(labels):
-                if label == 5 or label == 6:
-                    l += _scores[i][j]
-        
+            # for j, label in enumerate(labels):
+            #     if label == 5 or label == 6:
+            #         l += _scores[i][j]
+            for w in targets:
+                m = (labels==w).float()
+                l += (_scores[i] * m).sum()
+        print(l)    
         return l
 
 
