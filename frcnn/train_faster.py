@@ -12,12 +12,12 @@ from copy import copy
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torch.utils.data as data
-from utils.config import opt
-from model import FasterRCNNVGG16
-from trainer import FasterRCNNTrainer
-from data.util import  read_image
-from utils.vis_tool import vis_bbox, vis_image
-from utils import array_tool as at
+from frcnn import FRCNN
+
+unloader = transforms.ToPILImage()
+frcnn = FRCNN()
+crop = False
+count = False
 
 def getBack(var_grad_fn):
     print(var_grad_fn)
@@ -35,15 +35,12 @@ def getBack(var_grad_fn):
 torch.autograd.set_detect_anomaly(True)
 num = 0
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
-# input_path = "/home/duanchengqi20/Patch/image/1_223.jpg"
+input_path = "/home/duanchengqi20/Patch/image/1_223.jpg"
 # model = torch.hub.load('/home/duanchengqi20/.cache/torch/hub/ultralytics_yolov3_master', 'yolov3', source="local").to(device)  # or yolov3-spp, yolov3-tiny, custom
 # model.eval()
-faster_rcnn = FasterRCNNVGG16() 
-trainer = FasterRCNNTrainer(faster_rcnn).cuda()
-# trainer.load('/home/duanchengqi20/Patch/simple-faster-rcnn/chainer_best_model_converted_to_pytorch_0.7053.pth')
-trainer.load('/home/xueshuxinxing-jz/liuzeyu20/YouOnlyAttackOnce/frcnn/chainer_best_model_converted_to_pytorch_0.7053.pth')
-opt.caffe_pretrain=True
-with open("../datasets/loc.json", "r") as f:
+
+
+with open("/home/duanchengqi20/Patch/loc.json", "r") as f:
     loc = json.load(f)
 
 train_img = []
@@ -68,18 +65,20 @@ def patch_init():
 
 cnt = 0 
 
+
 class img():
     def __init__(self, path, name, cnt):
         self.image = Image.open(path)
-        self.arr = np.array(self.image)
-        # img_to_tensor = transforms.ToTensor()
+        to_tensor = transforms.ToTensor()
         # pic = Image.open(path)
         # self.tensor = img_to_tensor(pic)
         # self.tensor = self.tensor.transpose(0,1).transpose(1,2).to(device)
-        self.tensor = torch.from_numpy(self.arr).type(torch.float32).to(device)
+        self.tensor = to_tensor(self.image).type(torch.float32).to(device)
+        self.tensor *= 255
+        self.tensor = self.tensor.transpose(0,1).transpose(1,2)
         self.name = name
         self.loc = loc[self.name]
-        self.shape = self.arr.shape
+        self.shape = self.tensor.shape
         self.cnt = cnt
 
     def init_patch(self):
@@ -114,7 +113,7 @@ class img():
         # toPIL = transforms.ToPILImage()
         # pic = toPIL(adv)
         # pic.save('/home/duanchengqi20/Patch/image/trained/test{}.png'.format(name))
-        # Image.fromarray(adv).save('/home/duanchengqi20/Patch/image/trained/test{}.png'.format(name))
+        Image.fromarray(adv).save('/home/duanchengqi20/Patch/image/trained/test{}.png'.format(name))
 
 
     def attack(self, patch):
@@ -125,7 +124,7 @@ class img():
         # adv_x = (self.tensor * mask + patch * (1 - mask)).transpose(1,2).transpose(0,1).unsqueeze(0).to(torch.float32) / 255
         adv_x = self.add_patch(patch).transpose(2,1).transpose(1,0).unsqueeze(0).to(torch.float32)
         # adv_x = self.add_patch(patch).transpose(1,2).transpose(0,1).unsqueeze(0).to(torch.float32) / 255
-        self.save_img(adv_x, cnt)
+        #self.save_img(adv_x, cnt)
         cnt += 1
         return adv_x
 
@@ -142,12 +141,23 @@ def los(_bboxes, _labels, _scores):
                 l += _scores[i][j]
     
     return l
+t = 0
+def val():
+    image = Image.open("/home/duanchengqi20/Patch/image/trained/test99545.png")
+    to_tensor = transforms.ToTensor()
+    print((to_tensor(image).unsqueeze(0).cuda()-t).abs().max())
+    a, b, c = frcnn.detect_image([to_tensor(image).unsqueeze(0).cuda()], crop = crop, count = count, pil=False)
+    # r_image = frcnn.detect_image(image, crop = crop, count = count, pil = True)
+    print(1)
 
-# input_path = "/home/duanchengqi20/Patch/image/raw"
-input_path = "../datasets/image"
+input_path = "/home/duanchengqi20/Patch/image/raw"
 files = os.listdir(input_path)
 for i, file in enumerate(files):
-    if i > 1:
+    # if i>32:
+    if "4_229" not in file:
+        continue
+    #     continue
+    if "231" not in file and "230" not in file and "229" not in file and "228" not in file and "227" not in file and "226" not in file:
         continue
     if file not in loc.keys():
         continue
@@ -155,6 +165,8 @@ for i, file in enumerate(files):
     #     break
     train_img.append(img(os.path.join(input_path, file), file, num))
     num += 1
+    # if num > 8:
+    #     break
 
 train_set = mydataset(train_img)
 origin_patch = patch_init()
@@ -162,10 +174,9 @@ origin_patch.retain_grad()
 batch_size = 1
 
 train_data_loader = data.DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last = True)
-num_epoch = 50
+num_epoch = 5000
 reshaped_patch = []
-loss_list = []
-
+adv = []
 
 for epoch in range(num_epoch):
     total = 0
@@ -174,31 +185,51 @@ for epoch in range(num_epoch):
         a = time.time()
         x = [train_img[i] for i in x]
         reshaped_patch.clear()
-        loss_list.clear()
+        adv.clear()
         reshaped_patch = [i.transform_patch(origin_patch) for i in x]
-        loss_list = [i.attack(reshaped_patch[t]) for t, i in enumerate(x)]
+        adv = [i.attack(reshaped_patch[t])/255 for t, i in enumerate(x)]
+        #img_reshaper = torch.nn.AdaptiveAvgPool2d((384, 640)).to(device)
+        # loss_list1 = [img_reshaper(i) for i in loss_list]
         # aaa = torch.concat(loss_list, 0)
-        faster_rcnn.train()
-        _bboxes, _labels, _scores = trainer.faster_rcnn.predict(loss_list)
-        faster_rcnn.eval()
-        b = time.time()
-        total_loss = los(_bboxes, _labels, _scores)
-        total += total_loss
-        c = time.time()
+        #[train_img[0].tensor.unsqueeze(0).transpose(3,2).transpose(2,1)]
+        #frcnn.net = frcnn.net.train()
+        label, confidence, bboxes = frcnn.detect_image(adv, crop = crop, count = count, pil = False)
+        #label1, confidence1, bboxes1 = frcnn.detect_image(Image.open("/home/duanchengqi20/Patch/image/raw/4_229.jpg"), crop = crop, count = count, pil = True)
+        #frcnn.net = frcnn.net.eval()
+        # print("1:{}".format(torch.cuda.memory_allocated(0)))   
+        total_loss = los(bboxes, label, confidence)
+        print(total_loss)
         if total_loss == 0:
+            # print("1:{}".format(torch.cuda.memory_allocated(0)))
             continue
+        total += total_loss.data
         total_loss = total_loss / batch_size
-        # getBack(total_loss.grad_fn)
-        total_loss.backward()
+        try:
+            total_loss.backward()
+        except:
+            print("Anomaly")
+            total_loss = None
+            print("1:{}".format(torch.cuda.memory_allocated(0)))
+
         # getBack(loss_list[0][1].grad_fn)
         #print(origin_patch.grad)
-        origin_patch -= origin_patch.grad * (1e6 + 10*(1-epoch/1.5*num_epoch)*0.5/float(abs(origin_patch.grad).max()))
+        origin_patch -= origin_patch.grad * (1e4 + 10*(1-epoch/1.5*num_epoch)*0.5/float(abs(origin_patch.grad).max()))
+        #origin_patch -= origin_patch.grad*1e5
         origin_patch.clamp(0, 255)
-        print(total_loss)
-        print(b-a, c-b)
-    if total / 60 < 1 or epoch == num_epoch - 1:
-        train_img[0].save_img(origin_patch, 100909)
+    print(total)
+    train_img[0].save_img(origin_patch, epoch)
     
+    if total/8 <= 0.01 or epoch == num_epoch - 1:
+        # train_img[0].save_img(origin_patch, 100909)
+        for i,j in enumerate(train_img):
+            reshaped_pat = j.transform_patch(origin_patch)
+            adv_x = j.attack(reshaped_pat)
+            train_img[0].save_img(adv_x, 99545)
+            label, confidence, bboxes = frcnn.detect_image([adv_x/255], crop = crop, count = count, pil = False)
+            t = adv_x/255
+        val()
+        exit(0)
+
 
 
 
