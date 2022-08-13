@@ -79,6 +79,7 @@ class Original_loss_gpu:
         for i, pi in enumerate(p):  # layer index, layer predictions
             # image, anchor, gridy, gridx
 
+            bs = pi.shape[0]  # batch size
             pi = pi.view(-1, pi.shape[-1])
             best_class = pi[...,5:].max(dim=1).values
             mask = torch.zeros(pi.shape[0],device=self.device)
@@ -89,7 +90,12 @@ class Original_loss_gpu:
             conf = torch.sigmoid(pi[...,4])
             lobj += (mask*conf).sum()
             cnt += float(mask.sum())
-        return lobj * 100, cnt
+        
+        lobj *= 10
+        print("cnt: ", cnt)
+        print("lobj: ", lobj)
+
+        return lobj * bs, cnt
 
 class Faster_RCNN_loss:
     def __init__(self):

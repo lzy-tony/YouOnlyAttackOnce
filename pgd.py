@@ -98,17 +98,9 @@ def train(opt):
                 im_mask = F.pad(im_mask, p2d, "constant", 0)
 
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
-                adv_im = adv_im.unsqueeze(dim=0)
                 
-                loss, _ = compute_loss(adv_im)
-                print(loss)
-
-                # gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
-                # gre = gre.detach().cpu().numpy()
-                # Image.fromarray(gre.astype('uint8')).save("gray.png")
-
-                # grayscale_cam = cam(input_tensor=adv_im, targets=targets)
-                # grayscale_cam = grayscale_cam[0, :]
+                pred = yolo(adv_im)
+                loss, _ = compute_loss(pred)
 
                 grad_ = torch.autograd.grad(loss, noise,
                                             retain_graph=False, create_graph=False)[0]
@@ -122,7 +114,7 @@ def train(opt):
             noise = torch.clamp(noise, min=0, max=1)
 
         
-        tensor2img(noise, f"./submission/pgd_small/pgd_attention_epoch{epoch}.png")
+        tensor2img(noise, f"./submission/pgd_small/pgd_small_epoch{epoch}.png")
         tensor2img(mask, f"./submission/pgd_small/mask.png")
 
 
