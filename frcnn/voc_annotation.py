@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from utils.utils import get_classes
+from frcnn_utils.utils import get_classes
 
 #--------------------------------------------------------------------------------------------------------------------------------#
 #   annotation_mode用于指定该文件运行时计算的内容

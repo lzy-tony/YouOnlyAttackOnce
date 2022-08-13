@@ -8,9 +8,9 @@ import torch.nn as nn
 from PIL import Image, ImageDraw, ImageFont
 
 from nets.frcnn import FasterRCNN
-from utils.utils import (cvtColor, get_classes, get_new_img_size, resize_image,
+from frcnn_utils.utils import (cvtColor, get_classes, get_new_img_size, resize_image,
                          preprocess_input, show_config)
-from utils.utils_bbox import DecodeBox
+from frcnn_utils.utils_bbox import DecodeBox
 
 
 #--------------------------------------------#

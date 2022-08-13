@@ -4,8 +4,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torchvision.ops import nms
-from utils.anchors import _enumerate_shifted_anchor, generate_anchor_base
-from utils.utils_bbox import loc2bbox
+from frcnn_utils.anchors import _enumerate_shifted_anchor, generate_anchor_base
+from frcnn_utils.utils_bbox import loc2bbox
 
 
 class ProposalCreator():

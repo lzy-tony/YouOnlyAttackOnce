@@ -91,11 +91,10 @@ class Original_loss_gpu:
             lobj += (mask*conf).sum()
             cnt += float(mask.sum())
         
-        lobj *= 10
-        print("cnt: ", cnt)
-        print("lobj: ", lobj)
+        print("--yolov3 lobj: ", lobj)
 
-        return lobj * bs, cnt
+        return lobj
+
 
 class Faster_RCNN_loss:
     def __init__(self):
@@ -110,7 +109,8 @@ class Faster_RCNN_loss:
             for w in targets:
                 m = (labels==w).float()
                 l += (_scores[i] * m).sum()
-        print(l)    
+        l *= 10
+        print("--frcnn loss: ", l)    
         return l
 
 

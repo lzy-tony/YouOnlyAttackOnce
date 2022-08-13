@@ -13,10 +13,10 @@ from torch.utils.data import DataLoader
 from nets.frcnn import FasterRCNN
 from nets.frcnn_training import (FasterRCNNTrainer, get_lr_scheduler,
                                  set_optimizer_lr, weights_init)
-from utils.callbacks import EvalCallback, LossHistory
-from utils.dataloader import FRCNNDataset, frcnn_dataset_collate
-from utils.utils import get_classes, show_config
-from utils.utils_fit import fit_one_epoch
+from frcnn_utils.callbacks import EvalCallback, LossHistory
+from frcnn_utils.dataloader import FRCNNDataset, frcnn_dataset_collate
+from frcnn_utils.utils import get_classes, show_config
+from frcnn_utils.utils_fit import fit_one_epoch
 
 '''
 训练自己的目标检测模型一定需要注意以下几点：

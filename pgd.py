@@ -36,9 +36,11 @@ def train(opt):
     device = opt.device
     dataset = ImageLoader()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
-    # yolo = load_yolo(device=device)
     frcnn = load_frcnn(device=device)
     frcnn_loss = Faster_RCNN_loss()
+
+    yolo = load_yolo(device=device)
+    yolo_loss = Original_loss_gpu(yolo)
 
     # patch size
     patch_height = 1260
@@ -102,16 +104,29 @@ def train(opt):
 
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 
-                # pred = yolo(adv_im)
-                # loss, _ = compute_loss(pred)
-                adv_im = adv_im.unsqueeze(dim=0)
-                label, confidence, bboxes = frcnn.detect_image(adv_im, crop = False, count = False, pil = False)
-                loss = frcnn_loss(bboxes, label, confidence)
-
-                grad_ = torch.autograd.grad(loss, noise,
+                pred = yolo(adv_im)
+                loss1 = yolo_loss(pred)
+                grad1_ = torch.autograd.grad(loss1, noise,
                                             retain_graph=False, create_graph=False)[0]
-                if not torch.isnan(grad_[0, 0, 0]):
-                    grad += grad_
+                if not torch.isnan(grad1_[0, 0, 0]):
+                    grad += grad1_
+
+                small_noise = transform_kernel(noise)
+                small_mask = transform_kernel(mask)
+                ori = im[..., ux:dx, uy:dy]
+                ori = ori.unsqueeze(dim=0)
+                patch = small_noise * small_mask + ori * (1 - small_mask)
+                pad_patch = F.pad(patch, p2d, "constant", 0)
+
+                adv_im = im * (1 - im_mask) + im_mask * pad_patch
+                adv_im = adv_im.unsqueeze(dim=0)
+                
+                label, confidence, bboxes = frcnn.detect_image(adv_im, crop = False, count = False, pil = False)
+                loss2 = frcnn_loss(bboxes, label, confidence)
+                grad2_ = torch.autograd.grad(loss2, noise,
+                                            retain_graph=False, create_graph=False)[0]
+                if not torch.isnan(grad2_[0, 0, 0]):
+                    grad += grad2_
                 
                 if batch % 10 == 0:
                     tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
@@ -120,8 +135,8 @@ def train(opt):
             noise = torch.clamp(noise, min=0, max=1)
 
         
-        tensor2img(noise, f"./submission/pgd_frcnn/pgd_small_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_frcnn/mask.png")
+        tensor2img(noise, f"./submission/pgd_ensemble2/pgd_ensemble2_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_ensemble2/mask.png")
 
 
 if __name__ == '__main__':

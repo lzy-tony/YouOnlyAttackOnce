@@ -4,8 +4,8 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 from tqdm import tqdm
 
-from utils.utils import get_classes
-from utils.utils_map import get_coco_map, get_map
+from frcnn_utils.utils import get_classes
+from frcnn_utils.utils_map import get_coco_map, get_map
 from frcnn import FRCNN
 
 if __name__ == "__main__":
