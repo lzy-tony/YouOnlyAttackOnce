@@ -69,7 +69,7 @@ class Original_loss_gpu:
     def __init__(self, model):
         self.device = next(model.parameters()).device
 
-    def __call__(self, p, targets):  # predictions, targets
+    def __call__(self, p, targets=[2, 5, 7]):  # predictions, targets
         lobj = torch.zeros(1, device=self.device)
         lcls = torch.zeros(1, device=self.device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets

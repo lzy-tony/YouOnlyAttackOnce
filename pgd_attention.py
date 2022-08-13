@@ -3,7 +3,6 @@ import sys
 import argparse
 from tqdm import tqdm
 from PIL import Image
-import numpy as np
 
 import torch
 from torch import nn
@@ -11,8 +10,9 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from util.load_detector import load_yolo
+from util.load_cam import load_yolo_gradplusplus
 from util.dataloader import ImageLoader
-from util.loss import Original_loss_gpu
+from util.loss import AttentionTransferLoss
 from util.tensor2img import tensor2img
 
 
@@ -22,7 +22,7 @@ def parse_opt():
     parser.add_argument("--alpha", type=float, default="5e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=12, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:0", help="device")
+    parser.add_argument("--device", type=str, default="cuda:1", help="device")
 
     opt = parser.parse_args()
 
@@ -34,8 +34,7 @@ def train(opt):
     device = opt.device
     dataset = ImageLoader()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
-    yolo = load_yolo(device=device)
-    compute_loss = Original_loss_gpu(yolo)
+    compute_loss = AttentionTransferLoss()
 
     # patch size
     patch_height = 1260
@@ -58,10 +57,10 @@ def train(opt):
     dw /= 2
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
-    # mask = torch.ones((3, patch_height, patch_width)).to(device)
-    mask = torch.ones((3, int(patch_height / 2), int(patch_width / 2))).to(device)
-    pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
-    mask = F.pad(mask, pmask, "constant", 0)
+    mask = torch.ones((3, patch_height, patch_width)).to(device)
+
+    yolo = load_yolo(device=device)
+    cam, targets = load_yolo_gradplusplus(yolo)
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
@@ -87,11 +86,7 @@ def train(opt):
 
                 transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-                small_noise = transform_kernel(noise)
-                small_mask = transform_kernel(mask)
-                ori = im[..., ux:dx, uy:dy]
-                ori = ori.unsqueeze(dim=0)
-                patch = small_noise * small_mask + ori * (1 - small_mask)
+                patch = transform_kernel(noise * mask)
 
                 p2d = (uy, im_width - dy, ux, im_height - dx)
                 pad_patch = F.pad(patch, p2d, "constant", 0)
@@ -100,7 +95,10 @@ def train(opt):
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 adv_im = adv_im.unsqueeze(dim=0)
                 
-                loss, _ = compute_loss(adv_im)
+                grayscale_cam = cam(input_tensor=adv_im, targets=targets)
+                grayscale_cam = grayscale_cam[0, :]
+
+                loss = compute_loss(grayscale_cam)
                 print(loss)
 
                 # gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
@@ -116,14 +114,16 @@ def train(opt):
                     grad += grad_
                 
                 if batch % 10 == 0:
-                    tensor2img(adv_im, f"./saves/adv_im2_{batch}_{i}.png")
+                    tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
+                    gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
+                    gre = gre.detach().cpu().numpy()
+                    Image.fromarray(gre.astype('uint8')).save(f"./heatmap/adv_im_{batch}_{i}.png")
             
             noise = noise.detach() - opt.alpha * grad.sign()
             noise = torch.clamp(noise, min=0, max=1)
 
         
-        tensor2img(noise, f"./submission/pgd_small/pgd_attention_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_small/mask.png")
+        tensor2img(noise, f"./submission/pgd_attention/pgd_attention_epoch{epoch}.png")
 
 
 if __name__ == '__main__':

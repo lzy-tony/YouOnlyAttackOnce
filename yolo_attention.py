@@ -81,7 +81,7 @@ class YoloScoreTarget:
 
 
 def exp_attention():
-    image = np.array(Image.open("./datasets/image/1_210.jpg"))
+    image = np.array(Image.open("./gen_results/4_222.png"))
     image_float_np = torch.from_numpy(np.float32(image).transpose(2,0,1)).unsqueeze(0)
     img = torchvision.transforms.Resize((384,640))(image_float_np)
     img = torch.autograd.Variable(img,requires_grad=True)
@@ -108,47 +108,14 @@ def exp_attention():
     print(grayscale_cam.shape)
     gre = grayscale_cam.reshape((384,640,1)).repeat(1,1,3) * 255
     gre = gre.detach().cpu().numpy()
-    # ul (150, 150)
-    gre[100, 150, 0] = 255
-    gre[100, 150, 1] = 0
-    gre[100, 150, 2] = 0
-    gre[100, 151, 0] = 255
-    gre[100, 151, 1] = 0
-    gre[100, 151, 2] = 0
-    gre[101, 150, 0] = 255
-    gre[101, 150, 1] = 0
-    gre[101, 150, 2] = 0
-    gre[101, 151, 0] = 255
-    gre[101, 151, 1] = 0
-    gre[101, 151, 2] = 0
 
-    #ur 150, 500
-    gre[100, 500, 0] = 0
-    gre[100, 500, 1] = 255
-    gre[100, 500, 2] = 0
-    gre[100, 501, 0] = 0
-    gre[100, 501, 1] = 255
-    gre[100, 501, 2] = 0
-    gre[101, 500, 0] = 0
-    gre[101, 500, 1] = 255
-    gre[101, 500, 2] = 0
-    gre[101, 501, 0] = 0
-    gre[101, 501, 1] = 255
-    gre[101, 501, 2] = 0
-
-    # dl (300, 150)
-    gre[300, 150, 0] = 0
-    gre[300, 150, 1] = 0
-    gre[300, 150, 2] = 255
-    gre[300, 151, 0] = 0
-    gre[300, 151, 1] = 0
-    gre[300, 151, 2] = 255
-    gre[301, 150, 0] = 0
-    gre[301, 150, 1] = 0
-    gre[301, 150, 2] = 255
-    gre[301, 151, 0] = 0
-    gre[301, 151, 1] = 0
-    gre[301, 151, 2] = 255
+    h1, h2, w1, w2 = 150, 300, 150, 500
+    for w in range(w1, w2):
+        gre[h1, w] = [255, 0, 0]
+        gre[h2, w] = [255, 0, 0]
+    for h in range(h1, h2):
+        gre[h, w1] = [255, 0, 0]
+        gre[h, w2] = [255, 0, 0]
 
     print(gre.max())
     Image.fromarray(gre.astype('uint8')).save("gray2.png")
