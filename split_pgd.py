@@ -42,8 +42,8 @@ def train(opt):
     beta = opt.momentum_beta
     dataset = ImageLoader()
     dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
-    frcnn = load_frcnn(device=device)
-    frcnn_loss = Faster_RCNN_loss()
+    # frcnn = load_frcnn(device=device)
+    # frcnn_loss = Faster_RCNN_loss()
 
     yolo = load_yolo(device=device)
     yolo_loss = Original_loss_gpu(yolo)
