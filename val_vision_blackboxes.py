@@ -66,9 +66,8 @@ def draw_boxes(boxes, labels, classes, image):
     return image
 
 
-def val(name, target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
+def val(name, device, target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
     print(f"evaluating {name}")
-    device = "cuda:0"
 
     if name == "Faster-RCNN":
         model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
@@ -140,7 +139,7 @@ def run(opt):
         model_list.append("FCOS")
     
     for name in model_list:
-        val(name)
+        val(name, opt.device)
 
 
 def parse_opt():
