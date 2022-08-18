@@ -1,7 +1,8 @@
+from PIL import Image
 from matplotlib.pyplot import box
 import run_dino
 import torch
-torch.cuda.set_device("cuda:2")
+torch.cuda.set_device("cuda:1")
 import cv2
 import torch.nn.functional as F
 import numpy as np
@@ -57,7 +58,7 @@ class Dino_verification:
             output = model.cuda()(img[None].cuda())
             output = postprocessors['bbox'](output, torch.Tensor([[1.0, 1.0]]).cuda())[0]
             
-            thershold = 0.3 # set a thershold
+            thershold = 0.1 # set a thershold
             vslzr = COCOVisualizer()
             scores = output['scores']
             labels = output['labels']
@@ -106,7 +107,7 @@ class Dino_verification:
 def main():
     with open("../../datasets/loc.json",'r') as f:
         coridinates = json.load(f)
-        patch = torch.from_numpy(np.array(cv2.imread("./pgd_ensemble2_epoch35.png")).astype(np.float32))
+        patch = torch.from_numpy(np.array(Image.open("./pgd_concat2_yolo_dino_epoch4.png")).astype(np.float32))
         d = Dino_verification("../../datasets/image",coridinates,patch)
         d.validation()
         

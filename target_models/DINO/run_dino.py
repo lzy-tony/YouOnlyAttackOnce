@@ -66,7 +66,7 @@ class MyDino():
         mask = mask.float()
         loss += (mask * torch.sigmoid(scores)).sum()
         print("--dino loss: ", loss)
-        return loss/2
+        return loss
 
 
 def demo():

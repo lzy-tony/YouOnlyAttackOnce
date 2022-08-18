@@ -8,6 +8,7 @@ from torch.nn import functional as F
 
 from util.dataloader import ImageLoader
 from util.tensor2img import tensor2img
+from util.enviro import recal_patch_rgb
 
 
 def gen_images(patch_path, save_path, device, dataset):
@@ -44,16 +45,16 @@ def gen_images(patch_path, save_path, device, dataset):
         im = im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
         
-        
         ty, tx, tw, th = label
         ux = int(round(dh + tx * r))
         uy = int(round(dw + ty * r))
         dx = int(round(dh + (tx + th) * r))
         dy = int(round(dw + (ty + tw) * r))
+        temp_noise = recal_patch_rgb(im*255,(uy, dy, ux, dx),noise)
 
         transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
         im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-        patch = transform_kernel(noise)
+        patch = transform_kernel(temp_noise)
 
         p2d = (uy, im_width - dy, ux, im_height - dx)
         pad_patch = F.pad(patch, p2d, "constant", 0)
@@ -64,7 +65,7 @@ def gen_images(patch_path, save_path, device, dataset):
 
 
 if __name__ == '__main__':
-    p_path = "./submission/pgd_ensemble3/pgd_ensemble2_epoch35.png"
+    p_path = "./submission/pgd_eot2/pgd_ensemble2_epoch8.png"
     # p_path = "./submission/pgd/texture.png"
     save_path = "./gen_results"
     dataset = ImageLoader()

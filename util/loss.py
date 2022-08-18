@@ -91,7 +91,7 @@ class Original_loss_gpu:
             lobj += (mask*conf).sum()
             cnt += float(mask.sum())
         
-        print("--yolov3 lobj: ", lobj)
+        # print("--yolov3 lobj: ", lobj)
 
         return lobj
 
