@@ -4,6 +4,7 @@ import argparse
 from tqdm import tqdm
 from PIL import Image
 import numpy as np
+import random
 import cv2
 
 import torch
@@ -18,6 +19,7 @@ from util.load_detector import load_frcnn_coco, load_yolo
 from util.dataloader import ImageLoader
 from util.loss import TORCH_VISION_LOSS, Faster_RCNN_COCO_loss, Faster_RCNN_loss, Original_loss_gpu
 from util.tensor2img import tensor2img
+from util.enviro import recal_patch_rgb
 
 sys.path.append("target_models/DINO")
 from target_models.DINO.run_dino import MyDino
@@ -89,8 +91,12 @@ def train(opt):
     # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
     # mask = F.pad(mask, pmask, "constant", 0)
 
+    yolo_max = 0.0
+    dino_max = 0.0
+    rcnn_max = 0.0
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
+        total_loss = 0
 
         for batch, (img, pos, name) in enumerate(tqdm(dataloader)):
             noise.requires_grad = True
@@ -106,14 +112,19 @@ def train(opt):
                 im /= 255  # 0 - 255 to 0.0 - 1.0
 
                 ty, tx, tw, th = tyt[i].item(), txt[i].item(), twt[i].item(), tht[i].item()
-                ux = int(round(dh + tx * r))
-                uy = int(round(dw + ty * r))
-                dx = int(round(dh + (tx + th) * r))
-                dy = int(round(dw + (ty + tw) * r))
+
+                 
+                ux = int(round(dh + tx * r)) + random.randint(-5,5)
+                uy = int(round(dw + ty * r)) + random.randint(-5,5)
+                dx = int(round(dh + (tx + th) * r)) + random.randint(-5,5)
+                dy = int(round(dw + (ty + tw) * r)) + random.randint(-5,5)
+                if (dx-ux <= 0) or (dy-uy<=0):
+                    continue
+                temp_noise = recal_patch_rgb(im*255,(uy, dy, ux, dx),noise)
 
                 transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-                small_noise = transform_kernel(noise)
+                small_noise = transform_kernel(temp_noise)
                 small_mask = transform_kernel(mask)
                 ori = im[..., ux:dx, uy:dy]
                 ori = ori.unsqueeze(dim=0)
@@ -195,6 +206,7 @@ def train(opt):
             mom_grad = beta * mom_grad + (1-beta) * grad
             noise = noise.detach() - opt.alpha * mom_grad.sign()
             noise = torch.clamp(noise, min=0, max=1)
+        print(total_loss/1037)
 
         
         tensor2img(noise, f"./submission/pgd_frcnn++_eta-7/pgd_frcnn++_eta-7_epoch{epoch}.png")
