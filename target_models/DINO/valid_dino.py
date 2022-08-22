@@ -1,7 +1,7 @@
 from matplotlib.pyplot import box
 import run_dino
 import torch
-torch.cuda.set_device("cuda:2")
+torch.cuda.set_device("cuda:0")
 import cv2
 import torch.nn.functional as F
 import numpy as np
@@ -106,7 +106,7 @@ class Dino_verification:
 def main():
     with open("../../datasets/loc.json",'r') as f:
         coridinates = json.load(f)
-        patch = torch.from_numpy(np.array(cv2.imread("./pgd_ensemble2_epoch35.png")).astype(np.float32))
+        patch = torch.from_numpy(np.array(cv2.imread("../../submission/pgd_frcnn/pgd_frcnn_epoch20.png")).astype(np.float32))
         d = Dino_verification("../../datasets/image",coridinates,patch)
         d.validation()
         

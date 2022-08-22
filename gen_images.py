@@ -64,7 +64,7 @@ def gen_images(patch_path, save_path, device, dataset):
 
 
 if __name__ == '__main__':
-    p_path = "./submission/pgd_ensemble3/pgd_ensemble2_epoch35.png"
+    p_path = "./submission/pgd/texture.png"
     # p_path = "./submission/pgd/texture.png"
     save_path = "./gen_results"
     dataset = ImageLoader()

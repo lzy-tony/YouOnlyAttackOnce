@@ -93,7 +93,7 @@ class Original_loss_gpu:
         
         print("--yolov3 lobj: ", lobj)
 
-        return lobj
+        return lobj + lcls
 
 
 class Faster_RCNN_loss:
@@ -128,3 +128,35 @@ class AttentionTransferLoss:
     def __call__(self, grayscale_cam):
         loss = (grayscale_cam * self.mask).sum()
         return loss
+
+
+class Faster_RCNN_COCO_loss:
+    def __call__(self, result, targets=[2, 5, 7]):
+        l = torch.zeros(1, device="cuda")
+        for t in targets:
+            for i in range(len(result[t])):
+                l += result[t][i, 4]
+        print("-faster r-cnn loss: ", l)
+        return l
+
+
+class TORCH_VISION_LOSS:
+    def __call__(self, outputs, detection_threshold=0.01):
+        l = torch.zeros(1, device="cuda")
+        p = torch.zeros(1, device="cuda")
+        height, width = 3840, 6400
+        eta = 1e-7
+
+        for index in range(len(outputs[0]['scores'])):
+            if outputs[0]['scores'][index] >= detection_threshold and \
+                (outputs[0]['labels'][index] == 3 or 
+                 outputs[0]['labels'][index] == 6 or 
+                 outputs[0]['labels'][index] == 8):
+                l += outputs[0]['scores'][index]
+                p += outputs[0]['boxes'][index][0] ** 2 + \
+                     (width - outputs[0]['boxes'][index][1]) ** 2 + \
+                     outputs[0]['boxes'][index][2] ** 2 + \
+                     (height - outputs[0]['boxes'][index][3]) ** 2
+        print("-TORCH_VISION CONF LOSS: ", l)
+        print("-TORCH_VISION POS LOSS: ", p)
+        return l + eta * p

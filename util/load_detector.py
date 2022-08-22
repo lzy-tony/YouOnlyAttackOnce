@@ -3,9 +3,14 @@ import os
 
 import torch
 
-sys.path.append("../frcnn")
+# sys.path.append("../frcnn")
 
-from frcnn import FRCNN
+# from frcnn import FRCNN
+
+sys.path.append("./mmdetection")
+
+from mmdet import __version__
+from mmdet.apis import init_detector
 
 
 def load_yolo(model_type='yolov3_spp', device="cuda:0"):
@@ -16,6 +21,13 @@ def load_yolo(model_type='yolov3_spp', device="cuda:0"):
     return model
 
 
-def load_frcnn(device="cuda:1"):
-    model = FRCNN()
+# def load_frcnn(device="cuda:1"):
+#     model = FRCNN()
+#     return model
+
+
+def load_frcnn_coco(device="cuda:1"):
+    config = './mmdetection/configs/faster_rcnn/faster_rcnn_r50_fpn_1x_coco.py'
+    checkpoint = './mmdetection/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'
+    model = init_detector(config, checkpoint, device="cuda:0")
     return model

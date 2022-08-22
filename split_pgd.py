@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import argparse
@@ -17,6 +18,7 @@ from util.load_detector import load_frcnn, load_yolo
 from util.dataloader import ImageLoader
 from util.loss import Faster_RCNN_loss, Original_loss_gpu
 from util.tensor2img import tensor2img
+from util.split_patch import SplitPatcher
 
 sys.path.append("target_models/DINO")
 from target_models.DINO.run_dino import MyDino
@@ -25,10 +27,10 @@ from target_models.DINO.run_dino import MyDino
 def parse_opt():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--alpha", type=float, default="1e-2", help="size of gradient update")
+    parser.add_argument("--alpha", type=float, default="7e-3", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=12, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:0", help="device")
+    parser.add_argument("--device", type=str, default="cuda:1", help="device")
     parser.add_argument("--momentum_beta", type=float, default=0.9, help="momentum need an beta arg")
 
     opt = parser.parse_args()
@@ -70,25 +72,24 @@ def train(opt):
     dh /= 2
     dw /= 2
 
-    noise = torch.zeros((3, patch_height, patch_width)).to(device)
-    mom_grad = torch.zeros((3, patch_height, patch_width)).to(device)
-    mask = torch.ones((3, patch_height, patch_width)).to(device)
-    # mask = torch.ones((3, int(patch_height / 2), int(patch_width / 2))).to(device)
-    # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
-    # mask = F.pad(mask, pmask, "constant", 0)
-
+    noise_list = [torch.zeros((3, int(patch_height/3), int(patch_width/3))).to(device) for i in range(6)]
+    pos_list = [0,2,6,1,3,4]
+    mom_grad_list = [torch.zeros((3, int(patch_height/3), int(patch_width/3))).to(device) for i in range(6)]
+    sp = SplitPatcher(device)
+    
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
 
         for batch, (img, pos, name) in enumerate(tqdm(dataloader)):
-            noise.requires_grad = True
+            for n in noise_list:
+                n.requires_grad = True
 
             tyt, txt, twt, tht = pos
             img = img.to(device)
 
-            grad = torch.zeros_like(noise, device=device)
             
             for i in range(img.shape[0]):
+                noise, mask = sp.patch(noise_list,pos_list)
                 im = img[i]
                 im = im.float()  # uint8 to fp16/32
                 im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -115,28 +116,12 @@ def train(opt):
                 
                 pred = yolo(adv_im)
                 loss1 = yolo_loss(pred)
-                grad1_ = torch.autograd.grad(loss1, noise,
-                                            retain_graph=False, create_graph=False)[0]
-                if not torch.isnan(grad1_[0, 0, 0]):
-                    grad += grad1_
-
-                small_noise = transform_kernel(noise)
-                small_mask = transform_kernel(mask)
-                ori = im[..., ux:dx, uy:dy]
-                ori = ori.unsqueeze(dim=0)
-                patch = small_noise * small_mask + ori * (1 - small_mask)
-                pad_patch = F.pad(patch, p2d, "constant", 0)
-
-                adv_im = im * (1 - im_mask) + im_mask * pad_patch
-                adv_im = adv_im.unsqueeze(dim=0)
+                grad1_ = torch.autograd.grad(loss1, noise_list[:3],
+                                            retain_graph=False, create_graph=False)
+                for j ,grad in enumerate(grad1_):
+                    mom_grad_list[j] = beta * mom_grad_list[j] + (1-beta) * grad.sign()
                 
-                label, confidence, bboxes = frcnn.detect_image(adv_im, crop = False, count = False, pil = False)
-                loss2 = frcnn_loss(bboxes, label, confidence)
-                grad2_ = torch.autograd.grad(loss2, noise,
-                                            retain_graph=False, create_graph=False)[0]
-                if not torch.isnan(grad2_[0, 0, 0]):
-                    grad += grad2_
-                    
+                noise, mask = sp.patch(noise_list,pos_list)
                 small_noise = transform_kernel(noise)
                 small_mask = transform_kernel(mask)
                 ori = im[..., ux:dx, uy:dy]
@@ -147,20 +132,20 @@ def train(opt):
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch                
                 output_dino = dino(adv_im)
                 loss3 = dino.cal_loss(output_dino)
-                grad3_ = torch.autograd.grad(loss3, noise, retain_graph=False, create_graph=False)[0]
-                if not torch.isnan(grad3_[0,0,0]):
-                    grad += grad3_
-                
+                grads = torch.autograd.grad(loss3, noise_list[3:6],
+                                            retain_graph=False, create_graph=False)
+                for j ,grad in enumerate(grads):
+                    mom_grad_list[j+3] = beta * mom_grad_list[j+3] + (1-beta) * grad.sign()
                 if batch % 10 == 0:
                     tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
-            
-            mom_grad = beta * mom_grad + (1-beta) * grad.sign()
-            noise = noise.detach() - opt.alpha * mom_grad
-            noise = torch.clamp(noise, min=0, max=1)
+                
+            for i in range(6):
+                noise_list[i] = noise_list[i].detach() - opt.alpha * mom_grad_list[i]
+                noise_list[i].clamp(0,1)
 
-        
-        tensor2img(noise, f"./submission/pgd_ensemble3/pgd_ensemble2_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_ensemble3/mask.png")
+        noise, mask = sp.patch(noise_list,pos_list)
+        tensor2img(noise, f"./submission/pgd_ensemble_s/pgd_ensemble_s_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_ensemble_s/mask.png")
 
 
 if __name__ == '__main__':
