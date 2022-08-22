@@ -30,7 +30,7 @@ def parse_opt():
     parser.add_argument("--alpha", type=float, default="7e-3", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=12, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:2", help="device")
+    parser.add_argument("--device", type=str, default="cuda:1", help="device")
     parser.add_argument("--momentum_beta", type=float, default=0.9, help="momentum need an beta arg")
 
     opt = parser.parse_args()
@@ -118,8 +118,8 @@ def train(opt):
                 loss1 = yolo_loss(pred)
                 grad1_ = torch.autograd.grad(loss1, noise_list[:3],
                                             retain_graph=False, create_graph=False)
-                for w,grad in enumerate(grad1_):
-                    mom_grad_list[w] += grad
+                for j ,grad in enumerate(grad1_):
+                    mom_grad_list[j] = beta * mom_grad_list[j] + (1-beta) * grad.sign()
                 
                 noise, mask = sp.patch(noise_list,pos_list)
                 small_noise = transform_kernel(noise)
@@ -134,18 +134,17 @@ def train(opt):
                 loss3 = dino.cal_loss(output_dino)
                 grads = torch.autograd.grad(loss3, noise_list[3:6],
                                             retain_graph=False, create_graph=False)
-                for w,grad in enumerate(grads):
-                    mom_grad_list[w+3] += grad
+                for j ,grad in enumerate(grads):
+                    mom_grad_list[j+3] = beta * mom_grad_list[j+3] + (1-beta) * grad.sign()
                 if batch % 10 == 0:
                     tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
                 
             for i in range(6):
-                noise_list[i] = noise_list[i].detach() - opt.alpha * mom_grad_list[i].sign()
-                mom_grad_list[i].zero_()
+                noise_list[i] = noise_list[i].detach() - opt.alpha * mom_grad_list[i]
                 noise_list[i].clamp(0,1)
 
         noise, mask = sp.patch(noise_list,pos_list)
-        tensor2img(noise, f"./submission/pgd_ensemble_s/pgd_ensemble2_epoch{epoch}.png")
+        tensor2img(noise, f"./submission/pgd_ensemble_s/pgd_ensemble_s_epoch{epoch}.png")
         tensor2img(mask, f"./submission/pgd_ensemble_s/mask.png")
 
 

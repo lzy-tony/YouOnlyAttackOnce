@@ -66,8 +66,8 @@ def gen_images(patch_path, save_path, device, dataset):
 
 
 if __name__ == '__main__':
-    p_path = "./pgd_ensemble2_epoch3.png"
-    # p_path = "./pgd_best.png"
+    p_path = "./submission/pgd/texture.png"
+    # p_path = "./submission/pgd/texture.png"
     save_path = "./gen_results"
     dataset = ImageLoader()
     device = "cuda:1"

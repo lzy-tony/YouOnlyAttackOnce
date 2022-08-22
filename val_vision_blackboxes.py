@@ -1,6 +1,7 @@
 import argparse
 import glob
 import os
+from turtle import window_height
 import cv2
 from PIL import Image
 import numpy as np
@@ -66,9 +67,8 @@ def draw_boxes(boxes, labels, classes, image):
     return image
 
 
-def val(name, target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
+def val(name, device, target_class = ["car", "bus", "truck"], image_dir="./gen_results"):
     print(f"evaluating {name}")
-    device = "cuda:0"
 
     if name == "Faster-RCNN":
         model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
@@ -76,6 +76,10 @@ def val(name, target_class = ["car", "bus", "truck"], image_dir="./gen_results")
         model = torchvision.models.detection.retinanet_resnet50_fpn(weights=torchvision.models.detection.RetinaNet_ResNet50_FPN_Weights.DEFAULT)
     if name == "FCOS":
         model = torchvision.models.detection.fcos_resnet50_fpn(weights=torchvision.models.detection.FCOS_ResNet50_FPN_Weights.DEFAULT)
+    if name == "SSD":
+        model = torchvision.models.detection.ssd300_vgg16(weights=torchvision.models.detection.SSD300_VGG16_Weights.DEFAULT)
+    if name == "SSDlite":
+        model = torchvision.models.detection.ssdlite320_mobilenet_v3_large(weights=torchvision.models.detection.SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
     model.eval().to(device)
 
     p = str(Path(image_dir).resolve())  # os-agnostic absolute path
@@ -138,9 +142,13 @@ def run(opt):
         model_list.append("RetinaNet")
     if opt.fcos != 0:
         model_list.append("FCOS")
+    if opt.ssd != 0:
+        model_list.append("SSD")
+    if opt.ssdlite != 0:
+        model_list.append("SSDlite")
     
     for name in model_list:
-        val(name)
+        val(name, opt.device)
 
 
 def parse_opt():
@@ -151,6 +159,8 @@ def parse_opt():
     parser.add_argument("--faster_rcnn", type=int, default=1, help="val faster-rcnn")
     parser.add_argument("--retinanet", type=int, default=1, help="val retinanet")
     parser.add_argument("--fcos", type=int, default=1, help="val fcos")
+    parser.add_argument("--ssd", type=int, default=1, help="val ssd")
+    parser.add_argument("--ssdlite", type=int, default=1, help="val ssdlite")
 
     opt = parser.parse_args()
     return opt

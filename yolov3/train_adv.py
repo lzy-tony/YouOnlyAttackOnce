@@ -183,8 +183,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     dw /= 2
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
-    mask = torch.ones((3, patch_height, patch_width)).to(device)
-    
+    mask = torch.zeros((3, patch_height, patch_width)).to(device)
+    mask[..., 0:int(patch_width / 2)] = 1
 
     for epoch in range(opt.steps):
         model.eval()
@@ -211,13 +211,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 dx = int(round(dh + (tx + th) * r))
                 dy = int(round(dw + (ty + tw) * r))
 
-                if len(im.shape) == 3:
-                    im = im[None]  # expand for batch dim
-                print(im.shape)
-
                 transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-                patch = transform_kernel(noise * mask)
+                small_noise = transform_kernel(noise)
+                small_mask = transform_kernel(mask)
+                ori = im[..., ux:dx, uy:dy]
+                ori = ori.unsqueeze(dim=0)
+                patch = small_noise * small_mask + ori * (1 - small_mask)
 
                 p2d = (uy, im_width - dy, ux, im_height - dx)
                 pad_patch = F.pad(patch, p2d, "constant", 0)
@@ -231,10 +231,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 out_im = out_im / 255
 
                 adv_out = out_im * 255
-                print(adv_out.shape)
                 out = adv_out.clone().round().detach().cpu().numpy().squeeze()
                 out = out.transpose(1, 2, 0).astype('uint8')
-                print(out.shape)
                 # cv2.imwrite(os.getcwd() + f"/saves/adv_{epoch}.png", out, [cv2.IMWRITE_PNG_COMPRESSION, 0])
                 if i % 20 == 0:
                     Image.fromarray(out).save(f"./saves/adv_im_epoch_{epoch}_{i}.png")
@@ -264,13 +262,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         noise_im = noise_im * 255
         noise_np = noise_im.clone().round().detach().cpu().numpy().squeeze()
         noise_np = noise_np.transpose(1, 2, 0).astype('uint8')
-        Image.fromarray(noise_np).save(f"./submission/sub4/texture_{epoch}.png")
+        Image.fromarray(noise_np).save(f"../submission/yolo_half/texture_{epoch}.png")
 
         mask_im = mask.clone().detach()
         mask_im = mask_im * 255
         mask_np = mask_im.clone().round().detach().cpu().numpy().squeeze()
         mask_np = mask_np.transpose(1, 2, 0).astype('uint8')
-        Image.fromarray(mask_np).save(f"./submission/sub4/mask_{epoch}.png")
+        Image.fromarray(mask_np).save(f"./submission/sub4/mask.png")
 
 
 def parse_opt(known=False):
