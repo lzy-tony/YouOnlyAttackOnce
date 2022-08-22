@@ -119,7 +119,7 @@ def train(opt):
                 grad1_ = torch.autograd.grad(loss1, noise_list[:3],
                                             retain_graph=False, create_graph=False)
                 for w,grad in enumerate(grad1_):
-                    mom_grad_list[w] = beta * mom_grad_list[w] + (1-beta) * grad.sign()
+                    mom_grad_list[w] += grad
                 
                 noise, mask = sp.patch(noise_list,pos_list)
                 small_noise = transform_kernel(noise)
@@ -135,12 +135,13 @@ def train(opt):
                 grads = torch.autograd.grad(loss3, noise_list[3:6],
                                             retain_graph=False, create_graph=False)
                 for w,grad in enumerate(grads):
-                    mom_grad_list[w+3] = beta * mom_grad_list[w+3] + (1-beta) * grad.sign()
+                    mom_grad_list[w+3] += grad
                 if batch % 10 == 0:
                     tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
                 
             for i in range(6):
-                noise_list[i] = noise_list[i].detach() - opt.alpha * mom_grad_list[i]
+                noise_list[i] = noise_list[i].detach() - opt.alpha * mom_grad_list[i].sign()
+                mom_grad_list[i].zero_()
                 noise_list[i].clamp(0,1)
 
         noise, mask = sp.patch(noise_list,pos_list)

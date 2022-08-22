@@ -9,9 +9,9 @@ import cv2
 def recal_patch_rgb(initial_img,pos,patch):
     uy, dy, ux, dx = pos
     patch_pos = initial_img[...,ux:dx,uy:dy]
-    refined_patch = patch*(patch_pos.mean((1,2)).reshape(3,1,1).repeat(1,1260,2790))/200
+    refined_patch = patch*(patch_pos.mean((1,2)).reshape(3,1,1).repeat(1,1260,2790))/255
     ini_min = initial_img.min()/255
-    ini_min = torch.sqrt(ini_min)
+    ini_min = ini_min ** 0.4
     r = refined_patch * (1-ini_min) + ini_min
     return r
 
@@ -28,3 +28,6 @@ def exp():
     Image.fromarray((im*255).astype('uint8')).save("./modified.png")
     # print(im.max((0,1)))
     # print(im.mean())
+    
+# if __name__ == '__main__':
+#     exp()

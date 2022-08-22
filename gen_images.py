@@ -51,6 +51,7 @@ def gen_images(patch_path, save_path, device, dataset):
         dx = int(round(dh + (tx + th) * r))
         dy = int(round(dw + (ty + tw) * r))
         temp_noise = recal_patch_rgb(im*255,(uy, dy, ux, dx),noise)
+        # temp_noise = noise
 
         transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
         im_mask = torch.ones((dx - ux, dy - uy)).to(device)
@@ -65,8 +66,8 @@ def gen_images(patch_path, save_path, device, dataset):
 
 
 if __name__ == '__main__':
-    p_path = "./submission/pgd_eot2/pgd_ensemble2_epoch8.png"
-    # p_path = "./submission/pgd/texture.png"
+    p_path = "./pgd_ensemble2_epoch3.png"
+    # p_path = "./pgd_best.png"
     save_path = "./gen_results"
     dataset = ImageLoader()
     device = "cuda:1"

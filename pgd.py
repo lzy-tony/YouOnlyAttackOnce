@@ -169,8 +169,8 @@ def train(opt):
                 if batch % 10 == 0:
                     tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
             
-            mom_grad = beta * mom_grad + (1-beta) * grad.sign()
-            noise = noise.detach() - opt.alpha * mom_grad
+            mom_grad = beta * mom_grad + (1-beta) * grad
+            noise = noise.detach() - opt.alpha * mom_grad.sign()
             noise = torch.clamp(noise, min=0, max=1)
         print(total_loss/1037)
 
