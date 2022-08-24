@@ -5,13 +5,14 @@ from tqdm import tqdm
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torchvision.transforms import Resize
 
 from util.dataloader import ImageLoader
 from util.tensor2img import tensor2img
 from util.enviro import recal_patch_rgb
 
 
-def gen_images(patch_path, save_path, device, dataset):
+def gen_images(patch_path, mask_path, save_path, device, dataset):
     # patch size
     patch_height = 1260
     patch_width = 2790
@@ -39,6 +40,16 @@ def gen_images(patch_path, save_path, device, dataset):
     noise = torch.from_numpy(noise).to(device)
     noise = noise.float()
     noise /= 255
+    # noise = noise * 1.5
+    # noise = torch.clamp(noise, min=0, max=1)
+
+
+    mask = cv2.imread(mask_path)
+    mask = mask.transpose((2, 0, 1))[::-1]
+    mask = np.ascontiguousarray(mask)
+    mask = torch.from_numpy(mask).to(device)
+    mask = mask.float()
+    mask /= 255
 
     for im, label, name in tqdm(dataset):
         im = torch.from_numpy(im).to(device)
@@ -54,21 +65,27 @@ def gen_images(patch_path, save_path, device, dataset):
         # temp_noise = noise
 
         transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
+        # transform_kernel = Resize((dx - ux, dy - uy))
         im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-        patch = transform_kernel(temp_noise)
+        small_noise = transform_kernel(noise)
+        small_mask = transform_kernel(mask)
+        ori = im[..., ux:dx, uy:dy]
+        ori = ori.unsqueeze(dim=0)
+        patch = small_noise * small_mask + ori * (1 - small_mask)
 
         p2d = (uy, im_width - dy, ux, im_height - dx)
         pad_patch = F.pad(patch, p2d, "constant", 0)
         im_mask = F.pad(im_mask, p2d, "constant", 0)
 
         adv_im = im * (1 - im_mask) + im_mask * pad_patch
-        tensor2img(adv_im, save_path + "/" + name[:-3] + "png")        
+        tensor2img(adv_im, save_path + "/" + name[:-3] + "png")
 
 
 if __name__ == '__main__':
-    p_path = "./submission/pgd/texture.png"
+    p_path = "./submission/pgd_smooth_mtm/pgd_smooth_5e-5_epoch4.png"
+    m_path = "./submission/pgd_smooth_mtm/mask.png"
     # p_path = "./submission/pgd/texture.png"
     save_path = "./gen_results"
     dataset = ImageLoader()
     device = "cuda:1"
-    gen_images(p_path, save_path, device, dataset)
+    gen_images(p_path, m_path, save_path, device, dataset)
