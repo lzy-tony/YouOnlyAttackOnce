@@ -9,6 +9,7 @@ from torchvision.transforms import Resize
 
 from util.dataloader import ImageLoader
 from util.tensor2img import tensor2img
+from util.enviro import recal_patch_rgb
 
 
 def gen_images(patch_path, mask_path, save_path, device, dataset):
@@ -55,12 +56,13 @@ def gen_images(patch_path, mask_path, save_path, device, dataset):
         im = im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
         
-        
         ty, tx, tw, th = label
         ux = int(round(dh + tx * r))
         uy = int(round(dw + ty * r))
         dx = int(round(dh + (tx + th) * r))
         dy = int(round(dw + (ty + tw) * r))
+        temp_noise = recal_patch_rgb(im*255,(uy, dy, ux, dx),noise)
+        # temp_noise = noise
 
         transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
         # transform_kernel = Resize((dx - ux, dy - uy))
