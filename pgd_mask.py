@@ -16,7 +16,7 @@ sys.path.append("./frcnn")
 
 from util.load_detector import load_frcnn_coco, load_yolo
 from util.dataloader import ImageLoader
-from util.loss import TORCH_VISION_LOSS, Faster_RCNN_COCO_loss, Faster_RCNN_loss, Original_loss_gpu, TV_loss
+from util.loss import TORCH_VISION_LOSS, Faster_RCNN_COCO_loss, Faster_RCNN_loss, Original_loss_gpu
 from util.tensor2img import tensor2img
 
 sys.path.append("target_models/DINO")
@@ -28,7 +28,7 @@ def parse_opt():
 
     parser.add_argument("--alpha", type=float, default="1e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
-    parser.add_argument("--batch-size", type=int, default=24, help="batch size")
+    parser.add_argument("--batch-size", type=int, default=12, help="batch size")
     parser.add_argument("--device", type=str, default="cuda:0", help="device")
     parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
 
@@ -54,8 +54,6 @@ def train(opt):
 
     yolo = load_yolo(device=device)
     yolo_loss = Original_loss_gpu(yolo)
-
-    tv_loss = TV_loss()
     
     # dino = MyDino()
 
@@ -81,8 +79,10 @@ def train(opt):
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mom_grad = torch.zeros((3, patch_height, patch_width)).to(device)
-    mask = torch.ones((3, patch_height, patch_width)).to(device)
-    mask[..., 0:int(patch_width / 2)] = 0
+    mask = torch.zeros((3, patch_height, patch_width)).to(device)
+    for h in range(0, 1200, 200):
+        for w in range(0, 2600, 200):
+            pass
     # cx, cy = patch_height / 2, patch_width / 2
     # for x in range(patch_height):
     #     for y in range(patch_width):
@@ -92,15 +92,8 @@ def train(opt):
     # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
     # mask = F.pad(mask, pmask, "constant", 0)
 
-    mu = 5e-5
-
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
-
-        total_loss = torch.zeros(1, device=device)
-        total_loss_obj = torch.zeros(1, device=device)
-        total_tv_loss = torch.zeros(1, device=device)
-        total_loss_cls = torch.zeros(1, device=device)
 
         for batch, (img, pos, name) in enumerate(tqdm(dataloader)):
             noise.requires_grad = True
@@ -140,14 +133,7 @@ def train(opt):
                 # outputs = model(adv_im)
                 # loss2 = torch_vision_loss(outputs)
                 outputs = yolo(adv_im)
-                lobj, lconf = yolo_loss(outputs)
-                tv = tv_loss(noise)
-                loss2 = lobj + lconf + mu * tv
-                # loss2 = lobj + mu * tv
-                total_loss += loss2
-                total_loss_obj += lobj
-                total_tv_loss += mu * tv
-                total_loss_cls += lconf
+                loss2 = yolo_loss(outputs)
 
                 if loss2 > 0:
                     grad2_ = torch.autograd.grad(loss2, noise,
@@ -165,14 +151,11 @@ def train(opt):
                 #     if not torch.isnan(grad1_[0, 0, 0]):
                 #         grad += grad1_
                 # else:
-                #     outputs = model(adv_im)
-                #     loss2 = torch_vision_loss(outputs)
-                #     if loss2 > 0:
-                #         grad2_ = torch.autograd.grad(loss2, noise,
-                #                                      retain_graph=False, create_graph=False)[0]
-                #     else:
-                #         grad2_ = torch.zeros_like(noise, device=device)
-                #     grad += grad2_
+                #     output_dino = dino(adv_im)
+                #     loss3 = dino.cal_loss(output_dino)
+                #     grad3_ = torch.autograd.grad(loss3, noise, retain_graph=False, create_graph=False)[0]
+                #     if not torch.isnan(grad3_[0,0,0]):
+                #         grad += grad3_
 
 
 
@@ -212,17 +195,13 @@ def train(opt):
                 if batch % 10 == 0:
                     tensor2img(adv_im, f"./saves/adv_im_{batch}_{i}.png")
             
-            mom_grad = beta * mom_grad + (1-beta) * grad.sign()
-            noise = noise.detach() - opt.alpha * mom_grad
+            mom_grad = beta * mom_grad + (1-beta) * grad
+            noise = noise.detach() - opt.alpha * mom_grad.sign()
             noise = torch.clamp(noise, min=0, max=1)
 
         
-        print("-tot: ", total_loss / 1037)
-        print("-cls: ", total_loss_cls / 1037)
-        print("-lobj: ", total_loss_obj / 1037)
-        print("-tv: ", total_tv_loss / 1037)
-        tensor2img(noise, f"./submission/pgd_smooth_mtm_half/pgd_smooth_half_5e-5_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_smooth_mtm_half/mask.png")
+        tensor2img(noise, f"./submission/pgd_chess/pgd_chess_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_chess/mask.png")
 
 
 if __name__ == '__main__':

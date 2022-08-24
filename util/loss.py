@@ -91,9 +91,9 @@ class Original_loss_gpu:
             lobj += (mask*conf).sum()
             cnt += float(mask.sum())
         
-        print("--yolov3 lobj: ", lobj)
+        # print("--yolov3 lobj: ", lobj)
 
-        return lobj + lcls
+        return lobj, lcls
 
 
 class Faster_RCNN_loss:
@@ -143,9 +143,6 @@ class Faster_RCNN_COCO_loss:
 class TORCH_VISION_LOSS:
     def __call__(self, outputs, detection_threshold=0.01):
         l = torch.zeros(1, device="cuda")
-        p = torch.zeros(1, device="cuda")
-        height, width = 3840, 6400
-        eta = 1e-7
 
         for index in range(len(outputs[0]['scores'])):
             if outputs[0]['scores'][index] >= detection_threshold and \
@@ -153,10 +150,15 @@ class TORCH_VISION_LOSS:
                  outputs[0]['labels'][index] == 6 or 
                  outputs[0]['labels'][index] == 8):
                 l += outputs[0]['scores'][index]
-                p += outputs[0]['boxes'][index][0] ** 2 + \
-                     (width - outputs[0]['boxes'][index][1]) ** 2 + \
-                     outputs[0]['boxes'][index][2] ** 2 + \
-                     (height - outputs[0]['boxes'][index][3]) ** 2
         print("-TORCH_VISION CONF LOSS: ", l)
-        print("-TORCH_VISION POS LOSS: ", p)
-        return l + eta * p
+        return l
+
+class TV_loss:
+    def __call__(self, patch):
+        h = patch.shape[-2]
+        w = patch.shape[-1]
+        # h_tv = torch.pow((patch[..., 1:, :] - patch[..., :h - 1, :]), 2).sum()
+        # w_tv = torch.pow((patch[..., 1:] - patch[..., :w - 1]), 2).sum()
+        h_tv = torch.pow((patch[..., 1:, int(w/2):-1] - patch[..., :h - 1, int(w/2):-1]), 2).sum()
+        w_tv = torch.pow((patch[..., int(w/2) + 1:] - patch[..., int(w/2):w - 1]), 2).sum()
+        return h_tv + w_tv

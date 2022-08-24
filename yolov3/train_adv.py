@@ -184,7 +184,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mask = torch.zeros((3, patch_height, patch_width)).to(device)
-    mask[..., 0:int(patch_width / 2)] = 1
+    mask[..., int(patch_width / 2):-1] = 1
 
     for epoch in range(opt.steps):
         model.eval()
@@ -235,7 +235,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 out = out.transpose(1, 2, 0).astype('uint8')
                 # cv2.imwrite(os.getcwd() + f"/saves/adv_{epoch}.png", out, [cv2.IMWRITE_PNG_COMPRESSION, 0])
                 if i % 20 == 0:
-                    Image.fromarray(out).save(f"./saves/adv_im_epoch_{epoch}_{i}.png")
+                    Image.fromarray(out).save(f"./saves/adv_im_{i}.png")
 
                 pred = model(adv_im)
                 loss = compute_loss(pred, targets) # do loss
@@ -262,13 +262,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         noise_im = noise_im * 255
         noise_np = noise_im.clone().round().detach().cpu().numpy().squeeze()
         noise_np = noise_np.transpose(1, 2, 0).astype('uint8')
-        Image.fromarray(noise_np).save(f"../submission/yolo_half/texture_{epoch}.png")
+        Image.fromarray(noise_np).save(f"./submission/sub_half/texture_{epoch}.png")
 
         mask_im = mask.clone().detach()
         mask_im = mask_im * 255
         mask_np = mask_im.clone().round().detach().cpu().numpy().squeeze()
         mask_np = mask_np.transpose(1, 2, 0).astype('uint8')
-        Image.fromarray(mask_np).save(f"./submission/sub4/mask.png")
+        Image.fromarray(mask_np).save(f"./submission/sub_half/mask.png")
 
 
 def parse_opt(known=False):
@@ -279,7 +279,7 @@ def parse_opt(known=False):
                         help="size of gradient update")
     parser.add_argument("--model", type=str, default="yolov3",
                         choices=["yolov3"], help="white box model to attack")
-    parser.add_argument("--steps", type=int, default=50,
+    parser.add_argument("--steps", type=int, default=500,
                         help="number of iterations to attack")
     parser.add_argument("--img_source", type=str, default="../datasets/image",
                         help="image source")
