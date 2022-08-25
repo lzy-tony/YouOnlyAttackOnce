@@ -150,15 +150,15 @@ class TORCH_VISION_LOSS:
                  outputs[0]['labels'][index] == 6 or 
                  outputs[0]['labels'][index] == 8):
                 l += outputs[0]['scores'][index]
-        print("-TORCH_VISION CONF LOSS: ", l)
+        # print("-TORCH_VISION CONF LOSS: ", l)
         return l
 
 class TV_loss:
     def __call__(self, patch):
         h = patch.shape[-2]
         w = patch.shape[-1]
-        # h_tv = torch.pow((patch[..., 1:, :] - patch[..., :h - 1, :]), 2).sum()
-        # w_tv = torch.pow((patch[..., 1:] - patch[..., :w - 1]), 2).sum()
-        h_tv = torch.pow((patch[..., 1:, int(w/2):-1] - patch[..., :h - 1, int(w/2):-1]), 2).sum()
-        w_tv = torch.pow((patch[..., int(w/2) + 1:] - patch[..., int(w/2):w - 1]), 2).sum()
+        h_tv = torch.pow((patch[..., 1:, :] - patch[..., :h - 1, :]), 2).sum()
+        w_tv = torch.pow((patch[..., 1:] - patch[..., :w - 1]), 2).sum()
+        # h_tv = torch.pow((patch[..., 1:, int(w/2):-1] - patch[..., :h - 1, int(w/2):-1]), 2).sum()
+        # w_tv = torch.pow((patch[..., int(w/2) + 1:] - patch[..., int(w/2):w - 1]), 2).sum()
         return h_tv + w_tv

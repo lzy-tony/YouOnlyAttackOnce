@@ -200,4 +200,7 @@ class ImageLoader(Dataset):
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
 
-        return img, self.label_dict[split_path[-1]], split_path[-1]
+        img0 = img0.transpose((2, 0, 1))[::-1]
+        img0 = np.ascontiguousarray(img0)
+
+        return img, img0, self.label_dict[split_path[-1]], split_path[-1]

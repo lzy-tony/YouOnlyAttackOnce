@@ -94,7 +94,7 @@ def train(opt):
     # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
     # mask = F.pad(mask, pmask, "constant", 0)
 
-    mu = 5e-5
+    mu = 5e-6
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
@@ -150,8 +150,8 @@ def train(opt):
                 outputs = yolo(adv_im)
                 lobj, lconf = yolo_loss(outputs)
                 tv = tv_loss(noise)
-                loss2 = lobj + lconf + mu * tv
-                # loss2 = lobj + mu * tv
+                # loss2 = lobj + lconf + mu * tv
+                loss2 = lobj + mu * tv
                 total_loss += loss2
                 total_loss_obj += lobj
                 total_tv_loss += mu * tv
@@ -230,7 +230,7 @@ def train(opt):
         print("-cls: ", total_loss_cls / 1037)
         print("-lobj: ", total_loss_obj / 1037)
         print("-tv: ", total_tv_loss / 1037)
-        tensor2img(noise, f"./submission/pgd_smooth_mtm_half/pgd_smooth_half_5e-5_epoch{epoch}.png")
+        tensor2img(noise, f"./submission/pgd_smooth_mtm_half/pgd_smooth_half_5e-6_epoch{epoch}.png")
         tensor2img(mask, f"./submission/pgd_smooth_mtm_half/mask.png")
 
 
