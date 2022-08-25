@@ -188,13 +188,13 @@ def train(opt):
                     tensor2img(adv_im2, f"./saves/adv_im2_{batch}_{i}.png")
 
 
-                # if loss2 > 0:
-                #     grad2_ = torch.autograd.grad(loss2, noise,
-                #                                 retain_graph=False, create_graph=False)[0]
-                # else:
-                #     grad2_ = torch.zeros_like(noise, device=device)
-                # if not torch.isnan(grad2_[0, 0, 0]):
-                #     grad += grad2_ * split_mask_frcnn
+                if loss2 > 0:
+                    grad2_ = torch.autograd.grad(loss2, noise,
+                                                retain_graph=False, create_graph=False)[0]
+                else:
+                    grad2_ = torch.zeros_like(noise, device=device)
+                if not torch.isnan(grad2_[0, 0, 0]):
+                    grad += grad2_ * split_mask_frcnn
                     
                 '''
                 small_noise = transform_kernel(noise)
