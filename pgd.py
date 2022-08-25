@@ -19,7 +19,7 @@ from util.load_detector import load_frcnn_coco, load_yolo
 from util.dataloader import ImageLoader
 from util.loss import TORCH_VISION_LOSS, Faster_RCNN_COCO_loss, Faster_RCNN_loss, Original_loss_gpu, TV_loss
 from util.tensor2img import tensor2img
-from util.enviro import recal_patch_rgb
+from util.enviro import eot_ver2
 
 sys.path.append("target_models/DINO")
 from target_models.DINO.run_dino import MyDino
@@ -31,7 +31,7 @@ def parse_opt():
     parser.add_argument("--alpha", type=float, default="1e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=24, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:0", help="device")
+    parser.add_argument("--device", type=str, default="cuda:3", help="device")
     parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
 
     opt = parser.parse_args()
@@ -84,7 +84,7 @@ def train(opt):
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mom_grad = torch.zeros((3, patch_height, patch_width)).to(device)
     mask = torch.ones((3, patch_height, patch_width)).to(device)
-    mask[..., 0:int(patch_width / 2)] = 0
+    # mask[..., 0:int(patch_width / 2)] = 0
     # cx, cy = patch_height / 2, patch_width / 2
     # for x in range(patch_height):
     #     for y in range(patch_width):
@@ -127,7 +127,8 @@ def train(opt):
                 dy = int(round(dw + (ty + tw) * r)) + random.randint(-5,5)
                 if (dx-ux <= 0) or (dy-uy<=0):
                     continue
-                temp_noise = recal_patch_rgb(im*255,(uy, dy, ux, dx),noise)
+                # temp_noise = recal_patch_rgb(im*255,(uy, dy, ux, dx),noise)
+                temp_noise = eot_ver2(im,noise)
 
                 transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask = torch.ones((dx - ux, dy - uy)).to(device)
@@ -150,7 +151,7 @@ def train(opt):
                 outputs = yolo(adv_im)
                 lobj, lconf = yolo_loss(outputs)
                 tv = tv_loss(noise)
-                loss2 = lobj + lconf + mu * tv
+                loss2 = lobj + mu * tv
                 # loss2 = lobj + mu * tv
                 total_loss += loss2
                 total_loss_obj += lobj
@@ -230,8 +231,8 @@ def train(opt):
         print("-cls: ", total_loss_cls / 1037)
         print("-lobj: ", total_loss_obj / 1037)
         print("-tv: ", total_tv_loss / 1037)
-        tensor2img(noise, f"./submission/pgd_smooth_mtm_half/pgd_smooth_half_5e-5_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_smooth_mtm_half/mask.png")
+        tensor2img(noise, f"./submission/pgd_smooth_mtm_nocls/pgd_smooth_half_5e-5_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_smooth_mtm/mask.png")
 
 
 if __name__ == '__main__':
