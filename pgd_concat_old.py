@@ -18,6 +18,7 @@ from util.load_detector import load_yolo
 from util.dataloader import ImageLoader
 from util.loss import TORCH_VISION_LOSS, Faster_RCNN_loss, Original_loss_gpu, TV_loss, TV_loss_left, TV_loss_right
 from util.tensor2img import tensor2img
+from util.enviro import eot_ver2
 
 sys.path.append("target_models/DINO")
 from target_models.DINO.run_dino import MyDino
@@ -30,7 +31,7 @@ def parse_opt():
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=12, help="batch size")
     parser.add_argument("--device", type=str, default="cuda:0", help="device")
-    parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
+    parser.add_argument("--momentum_beta", type=float, default=0.9, help="momentum need an beta arg")
 
     opt = parser.parse_args()
 
@@ -91,9 +92,9 @@ def train(opt):
     # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
     # mask = F.pad(mask, pmask, "constant", 0)
 
-    # mu1 = 5e-7
-    # mu2 = 1e-7
-    mu1, mu2 = 0, 0
+    mu1 = 2e-8
+    mu2 = 1e-8
+    # mu1, mu2 = 0, 0
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
@@ -127,7 +128,8 @@ def train(opt):
 
                 transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask = torch.ones((dx - ux, dy - uy)).to(device)
-                small_noise = transform_kernel(noise)
+                temp_noise = eot_ver2(im,noise)
+                small_noise = transform_kernel(temp_noise)
                 small_mask = transform_kernel(mask)
                 ori = im[..., ux:dx, uy:dy]
                 ori = ori.unsqueeze(dim=0)
@@ -167,7 +169,8 @@ def train(opt):
 
                 transform_kernel2 = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask2 = torch.ones((dx - ux, dy - uy)).to(device)
-                small_noise2 = transform_kernel2(noise)
+                temp_noise = eot_ver2(im,noise)
+                small_noise2 = transform_kernel2(temp_noise)
                 small_mask2 = transform_kernel2(mask)
                 ori2 = im0[..., ux:dx, uy:dy]
                 ori2 = ori2.unsqueeze(dim=0)
@@ -226,8 +229,8 @@ def train(opt):
         print("-tvy: ", total_tv_loss_yolo / 1037)
         print("-lfrcnn", total_loss_frcnn / 1037)
         print("-tvf: ", total_tv_loss_frcnn / 1037)
-        tensor2img(noise, f"./submission/pgd_smooth_split_concat2_yolo_frcnn/pgd_smooth_concat2_yolo_frcnn_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_smooth_split_concat2_yolo_frcnn/mask.png")
+        tensor2img(noise, f"./submission/pgd_eot_tv/pgd_eot_tv_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_eot_tv/mask.png")
 
 
 if __name__ == '__main__':

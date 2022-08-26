@@ -31,8 +31,8 @@ def parse_opt():
     parser.add_argument("--alpha", type=float, default="1e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=24, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:3", help="device")
-    parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
+    parser.add_argument("--device", type=str, default="cuda:1", help="device")
+    parser.add_argument("--momentum_beta", type=float, default=0.9, help="momentum need an beta arg")
 
     opt = parser.parse_args()
 
@@ -151,13 +151,8 @@ def train(opt):
                 outputs = yolo(adv_im)
                 lobj, lconf = yolo_loss(outputs)
                 tv = tv_loss(noise)
-<<<<<<< HEAD
                 # loss2 = lobj + lconf + mu * tv
                 loss2 = lobj + mu * tv
-=======
-                loss2 = lobj + mu * tv
-                # loss2 = lobj + mu * tv
->>>>>>> dev_pyz
                 total_loss += loss2
                 total_loss_obj += lobj
                 total_tv_loss += mu * tv
@@ -236,13 +231,10 @@ def train(opt):
         print("-cls: ", total_loss_cls / 1037)
         print("-lobj: ", total_loss_obj / 1037)
         print("-tv: ", total_tv_loss / 1037)
-<<<<<<< HEAD
-        tensor2img(noise, f"./submission/pgd_smooth_mtm_half/pgd_smooth_half_5e-6_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_smooth_mtm_half/mask.png")
-=======
+
         tensor2img(noise, f"./submission/pgd_smooth_mtm_nocls/pgd_smooth_half_5e-5_epoch{epoch}.png")
         tensor2img(mask, f"./submission/pgd_smooth_mtm/mask.png")
->>>>>>> dev_pyz
+
 
 
 if __name__ == '__main__':

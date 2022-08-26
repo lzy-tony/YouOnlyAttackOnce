@@ -31,7 +31,7 @@ def parse_opt():
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=12, help="batch size")
     parser.add_argument("--device", type=str, default="cuda:2", help="device")
-    parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
+    parser.add_argument("--momentum_beta", type=float, default=0.9, help="momentum need an beta arg")
 
     opt = parser.parse_args()
 
@@ -145,7 +145,7 @@ def train(opt):
                 lobj, lconf = yolo_loss(pred)
                 # tv = tv_loss_l(noise)
                 # loss1 = lobj + mu1 * tv
-                loss1 = lobj
+                loss1 = lobj + lconf
                 grad1_ = torch.autograd.grad(loss1, noise,
                                             retain_graph=False, create_graph=False)[0]
                 if not torch.isnan(grad1_[0, 0, 0]):

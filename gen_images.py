@@ -51,7 +51,7 @@ def gen_images(patch_path, mask_path, save_path, device, dataset):
     mask = mask.float()
     mask /= 255
 
-    for im, label, name in tqdm(dataset):
+    for im, img0, label, name in tqdm(dataset):
         im = torch.from_numpy(im).to(device)
         im = im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -83,8 +83,8 @@ def gen_images(patch_path, mask_path, save_path, device, dataset):
 
 if __name__ == '__main__':
 
-    p_path = "./submission/pgd_scale_concat2_yolo_frcnn/pgd_smooth_concat2_yolo_frcnn_epoch0.png"
-    m_path = "./submission/pgd_scale_concat2_yolo_frcnn/mask.png"
+    p_path = "./submission/pgd_smooth_split_concat2_yolo_frcnn/pgd_smooth_concat2_yolo_frcnn_epoch3.png"
+    m_path = "./submission/pgd_smooth_split_concat2_yolo_frcnn/mask.png"
     # p_path = "./submission/pgd/texture.png"
     save_path = "./gen_results"
     dataset = ImageLoader()

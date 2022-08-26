@@ -67,7 +67,7 @@ class Yolo_verification:
 def main():
     with open("./datasets/loc.json",'r') as f:
         coridinates = json.load(f)
-        patch = torch.from_numpy(np.array(Image.open("./pgd_smooth_half_5e-5_epoch23.png")).astype(np.float32))
+        patch = torch.from_numpy(np.array(Image.open("./submission/pgd_eot_tv/pgd_eot_tv_epoch3.png")).astype(np.float32))
         # patch = torch.from_numpy(np.random())
         d = Yolo_verification("./datasets/image",coridinates,patch)
         d.validation()
