@@ -16,8 +16,9 @@ sys.path.append("./frcnn")
 
 from util.load_detector import load_frcnn_coco, load_yolo
 from util.dataloader import ImageLoader
-from util.loss import TORCH_VISION_LOSS, Faster_RCNN_COCO_loss, Faster_RCNN_loss, Original_loss_gpu
+from util.loss import Faster_RCNN_loss, Original_loss_gpu, TV_loss
 from util.tensor2img import tensor2img
+from util.split_patch import cal_soft_mask
 
 sys.path.append("target_models/DINO")
 from target_models.DINO.run_dino import MyDino
@@ -79,10 +80,13 @@ def train(opt):
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mom_grad = torch.zeros((3, patch_height, patch_width)).to(device)
-    mask = torch.zeros((3, patch_height, patch_width)).to(device)
-    for h in range(0, 1200, 200):
-        for w in range(0, 2600, 200):
-            pass
+    # mask = torch.zeros((3, patch_height, patch_width)).to(device)
+    ########## we are using a soft max#########
+    t,l,b,r = torch.zeros(1).to(device),torch.zeros(1).to(device),torch.zeros(1).to(device),torch.zeros(1).to(device)
+    b += patch_height
+    r += patch_width
+
+
     # cx, cy = patch_height / 2, patch_width / 2
     # for x in range(patch_height):
     #     for y in range(patch_width):
@@ -95,13 +99,14 @@ def train(opt):
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
 
-        for batch, (img, pos, name) in enumerate(tqdm(dataloader)):
+        for batch, (img,img0, pos, name) in enumerate(tqdm(dataloader)):
             noise.requires_grad = True
 
             tyt, txt, twt, tht = pos
             img = img.to(device)
 
             grad = torch.zeros_like(noise, device=device)
+            mask = cal_soft_mask(t,l,b,r,(3,patch_height,patch_width),device)
             
             for i in range(img.shape[0]):
                 im = img[i]
@@ -134,13 +139,15 @@ def train(opt):
                 # loss2 = torch_vision_loss(outputs)
                 outputs = yolo(adv_im)
                 loss2 = yolo_loss(outputs)
+                loss2 += (r-l+b-t)/(patch_width+patch_height)
 
                 if loss2 > 0:
-                    grad2_ = torch.autograd.grad(loss2, noise,
-                                                 retain_graph=False, create_graph=False)[0]
+                    grad2_,grad_t,grad_l,grad_b,grad_r = torch.autograd.grad(loss2, [noise,t,l,b,r],
+                                                 retain_graph=False, create_graph=False)
                 else:
                     grad2_ = torch.zeros_like(noise, device=device)
                 grad += grad2_
+                print(grad_t,grad_l,grad_b,grad_r)
                 
                 
                 # if batch % 2 == 0:
@@ -200,8 +207,8 @@ def train(opt):
             noise = torch.clamp(noise, min=0, max=1)
 
         
-        tensor2img(noise, f"./submission/pgd_chess/pgd_chess_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_chess/mask.png")
+        tensor2img(noise, f"./submission/pgd_soft/pgd_soft_epoch{epoch}.png")
+        tensor2img((mask > 0.5).float(), f"./submission/pgd_soft/mask_epoch{epoch}.png")
 
 
 if __name__ == '__main__':

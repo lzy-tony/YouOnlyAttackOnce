@@ -162,3 +162,25 @@ class TV_loss:
         # h_tv = torch.pow((patch[..., 1:, int(w/2):-1] - patch[..., :h - 1, int(w/2):-1]), 2).sum()
         # w_tv = torch.pow((patch[..., int(w/2) + 1:] - patch[..., int(w/2):w - 1]), 2).sum()
         return h_tv + w_tv
+
+
+class TV_loss_left:
+    def __call__(self, patch):
+        h = patch.shape[-2]
+        w = patch.shape[-1]
+        # h_tv = torch.pow((patch[..., 1:, :] - patch[..., :h - 1, :]), 2).sum()
+        # w_tv = torch.pow((patch[..., 1:] - patch[..., :w - 1]), 2).sum()
+        h_tv = torch.pow((patch[..., 1:, 0:int(w/2)] - patch[..., :h - 1, 0:int(w/2)]), 2).sum()
+        w_tv = torch.pow((patch[..., 1:int(w/2)] - patch[..., :int(w/2) - 1]), 2).sum()
+        return h_tv + w_tv
+
+
+class TV_loss_right:
+    def __call__(self, patch):
+        h = patch.shape[-2]
+        w = patch.shape[-1]
+        # h_tv = torch.pow((patch[..., 1:, :] - patch[..., :h - 1, :]), 2).sum()
+        # w_tv = torch.pow((patch[..., 1:] - patch[..., :w - 1]), 2).sum()
+        h_tv = torch.pow((patch[..., 1:, int(w/2):-1] - patch[..., :h - 1, int(w/2):-1]), 2).sum()
+        w_tv = torch.pow((patch[..., int(w/2) + 1:] - patch[..., int(w/2):w - 1]), 2).sum()
+        return h_tv + w_tv

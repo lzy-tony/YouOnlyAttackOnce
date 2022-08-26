@@ -9,8 +9,8 @@ import torch
 
 sys.path.append("./mmdetection")
 
-from mmdet import __version__
-from mmdet.apis import init_detector
+# from mmdet import __version__
+# from mmdet.apis import init_detector
 
 
 def load_yolo(model_type='yolov3_spp', device="cuda:0"):

@@ -16,9 +16,8 @@ sys.path.append("./frcnn")
 
 from util.load_detector import load_yolo
 from util.dataloader import ImageLoader
-from util.loss import TORCH_VISION_LOSS, Faster_RCNN_loss, Original_loss_gpu, TV_loss
+from util.loss import TORCH_VISION_LOSS, Faster_RCNN_loss, Original_loss_gpu, TV_loss, TV_loss_left, TV_loss_right
 from util.tensor2img import tensor2img
-from util.split_patch import cal_soft_mask
 
 sys.path.append("target_models/DINO")
 from target_models.DINO.run_dino import MyDino
@@ -30,7 +29,7 @@ def parse_opt():
     parser.add_argument("--alpha", type=float, default="1e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=12, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:3", help="device")
+    parser.add_argument("--device", type=str, default="cuda:0", help="device")
     parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
 
     opt = parser.parse_args()
@@ -54,7 +53,8 @@ def train(opt):
     yolo = load_yolo(device=device)
     yolo_loss = Original_loss_gpu(yolo)
 
-    tv_loss = TV_loss()
+    tv_loss_l = TV_loss_left()
+    tv_loss_r = TV_loss_right()
     
     # dino = MyDino()
 
@@ -80,7 +80,7 @@ def train(opt):
 
     noise = torch.zeros((3, patch_height, patch_width)).to(device)
     mom_grad = torch.zeros((3, patch_height, patch_width)).to(device)
-    # mask = torch.ones((3, patch_height, patch_width)).to(device)
+    mask = torch.ones((3, patch_height, patch_width)).to(device)
     split_mask_yolo = torch.zeros((3, patch_height, patch_width)).to(device)
     split_mask_yolo[..., 0:int(patch_width / 2)] = 1
     # split_mask_dino = torch.zeros_like(split_mask_yolo).to(device)
@@ -91,11 +91,9 @@ def train(opt):
     # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
     # mask = F.pad(mask, pmask, "constant", 0)
 
-    t,l= torch.zeros(1).to(device)+200,torch.zeros(1).to(device)+200
-    b = torch.zeros(1).to(device) + patch_height-200
-    r_ = torch.zeros(1).to(device) +patch_width-200
-    mu1 = 1e-5
-    mu2 = 5e-7
+    # mu1 = 5e-7
+    # mu2 = 1e-7
+    mu1, mu2 = 0, 0
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
@@ -109,17 +107,12 @@ def train(opt):
 
         for batch, (img, img0, pos, name) in enumerate(tqdm(dataloader)):
             noise.requires_grad = True
-            t.requires_grad = True
-            l.requires_grad = True
-            b.requires_grad = True
-            r_.requires_grad = True
 
             tyt, txt, twt, tht = pos
             img = img.to(device)
             img0 = img0.to(device)
 
             grad = torch.zeros_like(noise, device=device)
-            grad_l,grad_b,grad_r_,grad_t = torch.zeros_like(l,device=device),torch.zeros_like(l,device=device),torch.zeros_like(l,device=device),torch.zeros_like(l,device=device)
             
             for i in range(img.shape[0]):
                 im = img[i]
@@ -135,7 +128,6 @@ def train(opt):
                 transform_kernel = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask = torch.ones((dx - ux, dy - uy)).to(device)
                 small_noise = transform_kernel(noise)
-                mask = cal_soft_mask(t,l,b,r_,(3,patch_height,patch_width),device)
                 small_mask = transform_kernel(mask)
                 ori = im[..., ux:dx, uy:dy]
                 ori = ori.unsqueeze(dim=0)
@@ -149,16 +141,12 @@ def train(opt):
                 
                 pred = yolo(adv_im)
                 lobj, lconf = yolo_loss(pred)
-                tv = tv_loss(noise)
-                loss1 = lobj + lconf + mu1 * tv + (r_-l+b-t)/(patch_width+patch_height)
-                grad1_,grad1_t,grad1_l,grad1_b,grad1_r_ = torch.autograd.grad(loss1, [noise,t,l,b,r_],
-                                            retain_graph=False, create_graph=False)
+                tv = tv_loss_l(noise)
+                loss1 = lobj + mu1 * tv
+                grad1_ = torch.autograd.grad(loss1, noise,
+                                            retain_graph=False, create_graph=False)[0]
                 if not torch.isnan(grad1_[0, 0, 0]):
                     grad += grad1_ * split_mask_yolo
-                    grad_l += grad1_l
-                    grad_t += grad1_t
-                    grad_b += grad1_b
-                    grad_r_ += grad1_r_
                 total_loss_yolo += loss1
                 total_loss_obj += lobj
                 total_tv_loss_yolo += mu1 * tv
@@ -180,7 +168,6 @@ def train(opt):
                 transform_kernel2 = nn.AdaptiveAvgPool2d((dx - ux, dy - uy))
                 im_mask2 = torch.ones((dx - ux, dy - uy)).to(device)
                 small_noise2 = transform_kernel2(noise)
-                mask = cal_soft_mask(t,l,b,r_,(3,patch_height,patch_width),device)
                 small_mask2 = transform_kernel2(mask)
                 ori2 = im0[..., ux:dx, uy:dy]
                 ori2 = ori2.unsqueeze(dim=0)
@@ -194,8 +181,8 @@ def train(opt):
 
                 outputs = frcnn(adv_im2)
                 lfrcnn = torch_vision_loss(outputs)
-                tv = tv_loss(noise)
-                loss2 = lfrcnn + mu2 * tv + (r_-l+b-t)/(patch_width+patch_height)
+                tv = tv_loss_r(noise)
+                loss2 = lfrcnn + mu2 * tv
                 total_loss_frcnn += lfrcnn
                 total_tv_loss_frcnn += mu2 * tv
 
@@ -204,16 +191,12 @@ def train(opt):
 
 
                 if loss2 > 0:
-                    grad2_,grad1_t,grad1_l,grad1_b,grad1_r_ = torch.autograd.grad(loss2, [noise,t,l,b,r_],
-                                                retain_graph=False, create_graph=False)
+                    grad2_ = torch.autograd.grad(loss2, noise,
+                                                retain_graph=False, create_graph=False)[0]
                 else:
                     grad2_ = torch.zeros_like(noise, device=device)
                 if not torch.isnan(grad2_[0, 0, 0]):
                     grad += grad2_ * split_mask_frcnn
-                    grad_l += grad1_l
-                    grad_t += grad1_t
-                    grad_b += grad1_b
-                    grad_r_ += grad1_r_
                     
                 '''
                 small_noise = transform_kernel(noise)
@@ -222,7 +205,6 @@ def train(opt):
                 ori = ori.unsqueeze(dim=0)
                 patch = small_noise * small_mask + ori * (1 - small_mask)
                 pad_patch = F.pad(patch, p2d, "constant", 0)
-
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 output_dino = dino(adv_im)
                 loss3 = dino.cal_loss(output_dino)
@@ -236,17 +218,6 @@ def train(opt):
             mom_grad = beta * mom_grad + (1-beta) * grad
             noise = noise.detach() - opt.alpha * mom_grad.sign()
             noise = torch.clamp(noise, min=0, max=1)
-            t = t.detach() - grad_t
-            t = t.clamp(0,float(0.8*b))
-            l = l.detach() - grad_l
-            l = l.clamp(0,float(0.8*r_))
-            b = b.detach() - grad_b
-            b = b.clamp(float(1.2*t),patch_height)
-            r_ = r_.detach() -  grad_r_
-            r_ = r_.clamp(float(1.2*l),patch_width)
-            # tensor2img(mask, f"./submission/pgd_soft/mask_epoch{epoch}_batch{batch}.png")
-            # print(t,l,b,r_)
-
 
         
         print("-tot: ", total_loss_yolo / 1037)
@@ -255,9 +226,8 @@ def train(opt):
         print("-tvy: ", total_tv_loss_yolo / 1037)
         print("-lfrcnn", total_loss_frcnn / 1037)
         print("-tvf: ", total_tv_loss_frcnn / 1037)
-        tensor2img(noise, f"./submission/pgd_soft/pgd_soft_epoch{epoch}.png")
-        mask = cal_soft_mask(t,l,b,r_,(3,patch_height,patch_width),device)
-        tensor2img(mask, f"./submission/pgd_soft/mask_epoch{epoch}.png")
+        tensor2img(noise, f"./submission/pgd_smooth_split_concat2_yolo_frcnn/pgd_smooth_concat2_yolo_frcnn_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_smooth_split_concat2_yolo_frcnn/mask.png")
 
 
 if __name__ == '__main__':

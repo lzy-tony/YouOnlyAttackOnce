@@ -1,5 +1,7 @@
 import torch
 import torchvision
+from PIL import Image
+import numpy as np
 
 
 ##### if this is a image #####
@@ -34,3 +36,13 @@ class SplitPatcher:
     
     def get_patch_mask():
         pass
+    
+    
+def cal_soft_mask(t,l,b,r,size,device):
+    #size (3,1080,1920)
+    y_axis = torch.linspace(0,size[1]-1,steps=size[1]).unsqueeze(1).repeat((size[0],1,size[2])).to(device) #0~1079,t,b
+    x_axis = torch.linspace(0,size[2]-1,steps=size[2]).unsqueeze(0).repeat((size[0],size[1],1)).to(device) #0~1919,l,r
+    mask = (-torch.tanh(y_axis-t)*torch.tanh(y_axis-b)+1)*(-torch.tanh(x_axis-l)*torch.tanh(x_axis-r)+1)/4
+    return mask
+
+# cal_soft_patch(200,200,880,1720,(3,1080,1920),"cuda:1")

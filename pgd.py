@@ -31,7 +31,7 @@ def parse_opt():
     parser.add_argument("--alpha", type=float, default="1e-2", help="size of gradient update")
     parser.add_argument("--epochs", type=int, default=20000, help="number of epochs to attack")
     parser.add_argument("--batch-size", type=int, default=24, help="batch size")
-    parser.add_argument("--device", type=str, default="cuda:0", help="device")
+    parser.add_argument("--device", type=str, default="cuda:3", help="device")
     parser.add_argument("--momentum_beta", type=float, default=0.75, help="momentum need an beta arg")
 
     opt = parser.parse_args()
