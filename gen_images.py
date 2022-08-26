@@ -82,6 +82,7 @@ def gen_images(patch_path, mask_path, save_path, device, dataset):
 
 
 if __name__ == '__main__':
+
     p_path = "./submission/pgd_scale_concat2_yolo_frcnn/pgd_smooth_concat2_yolo_frcnn_epoch0.png"
     m_path = "./submission/pgd_scale_concat2_yolo_frcnn/mask.png"
     # p_path = "./submission/pgd/texture.png"

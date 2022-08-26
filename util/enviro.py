@@ -3,6 +3,7 @@ import torchvision
 from PIL import Image
 import numpy as np
 import cv2
+import torchvision
 # cv2.equalizeHist()
 
 
@@ -14,6 +15,11 @@ def recal_patch_rgb(initial_img,pos,patch):
     ini_min = ini_min ** 0.4
     r = refined_patch * (1-ini_min) + ini_min
     return r
+
+def eot_ver2(im,patch):
+    f = torch.sqrt(im.min())
+    refined_patch = torchvision.transforms.functional.adjust_brightness(patch,1.5) * (1-f) + f
+    return refined_patch
 
 def foggy(img):
     return img/2 + 0.5
