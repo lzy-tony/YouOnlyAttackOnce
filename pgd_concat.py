@@ -11,16 +11,11 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 import torchvision
 
-sys.path.append("./frcnn")
-
 
 from util.load_detector import load_yolo
 from util.dataloader import ImageLoader
-from util.loss import TORCH_VISION_LOSS, Faster_RCNN_loss, Original_loss_gpu, TV_loss
+from util.loss import TORCH_VISION_LOSS, Faster_RCNN_loss, Original_loss_gpu, TV_loss, TV_loss_left, TV_loss_right
 from util.tensor2img import tensor2img
-
-sys.path.append("target_models/DINO")
-from target_models.DINO.run_dino import MyDino
 
 
 def parse_opt():
@@ -53,7 +48,8 @@ def train(opt):
     yolo = load_yolo(device=device)
     yolo_loss = Original_loss_gpu(yolo)
 
-    tv_loss = TV_loss()
+    tv_loss_l = TV_loss_left()
+    tv_loss_r = TV_loss_right()
     
     # dino = MyDino()
 
@@ -90,8 +86,9 @@ def train(opt):
     # pmask = (int(np.ceil(patch_width / 4)), int(np.floor(patch_width / 4)), int(np.ceil(patch_height / 4)), int(np.ceil(patch_height / 4)))
     # mask = F.pad(mask, pmask, "constant", 0)
 
-    mu1 = 5e-5
-    mu2 = 1e-6
+    mu1 = 2e-8
+    mu2 = 1e-8
+    # mu1, mu2 = 0, 0
 
     for epoch in range(opt.epochs):
         print(f"==================== evaluating epoch {epoch} ====================")
@@ -139,8 +136,8 @@ def train(opt):
                 
                 pred = yolo(adv_im)
                 lobj, lconf = yolo_loss(pred)
-                tv = tv_loss(noise)
-                loss1 = lobj + lconf + mu1 * tv
+                tv = tv_loss_l(noise)
+                loss1 = lobj + mu1 * tv
                 grad1_ = torch.autograd.grad(loss1, noise,
                                             retain_graph=False, create_graph=False)[0]
                 if not torch.isnan(grad1_[0, 0, 0]):
@@ -179,7 +176,7 @@ def train(opt):
 
                 outputs = frcnn(adv_im2)
                 lfrcnn = torch_vision_loss(outputs)
-                tv = tv_loss(noise)
+                tv = tv_loss_r(noise)
                 loss2 = lfrcnn + mu2 * tv
                 total_loss_frcnn += lfrcnn
                 total_tv_loss_frcnn += mu2 * tv
@@ -203,7 +200,6 @@ def train(opt):
                 ori = ori.unsqueeze(dim=0)
                 patch = small_noise * small_mask + ori * (1 - small_mask)
                 pad_patch = F.pad(patch, p2d, "constant", 0)
-
                 adv_im = im * (1 - im_mask) + im_mask * pad_patch
                 output_dino = dino(adv_im)
                 loss3 = dino.cal_loss(output_dino)
@@ -225,8 +221,8 @@ def train(opt):
         print("-tvy: ", total_tv_loss_yolo / 1037)
         print("-lfrcnn", total_loss_frcnn / 1037)
         print("-tvf: ", total_tv_loss_frcnn / 1037)
-        tensor2img(noise, f"./submission/pgd_smooth_concat2_yolo_frcnn/pgd_smooth_concat2_yolo_frcnn_epoch{epoch}.png")
-        tensor2img(mask, f"./submission/pgd_smooth_concat2_yolo_frcnn/mask.png")
+        tensor2img(noise, f"./submission/pgd_concat2_smooth/pgd_concat2_smooth_epoch{epoch}.png")
+        tensor2img(mask, f"./submission/pgd_concat2_smooth/mask.png")
 
 
 if __name__ == '__main__':
