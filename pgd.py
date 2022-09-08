@@ -105,7 +105,7 @@ def train(opt):
         total_tv_loss = torch.zeros(1, device=device)
         total_loss_cls = torch.zeros(1, device=device)
 
-        for batch, (img, pos, name) in enumerate(tqdm(dataloader)):
+        for batch, (img, img0, pos, name) in enumerate(tqdm(dataloader)):
             noise.requires_grad = True
 
             tyt, txt, twt, tht = pos

@@ -1,4 +1,5 @@
 import torch
+import random
 import torchvision
 from PIL import Image
 import numpy as np
@@ -16,17 +17,18 @@ def recal_patch_rgb(initial_img,pos,patch):
     r = refined_patch * (1-ini_min) + ini_min
     return r
 
-def eot_ver2(im,patch):
-    f = torch.sqrt(im.min())
-    refined_patch = torchvision.transforms.functional.adjust_brightness(patch,1.5) * (1-f) + f
-    return refined_patch
+# def eot_ver2(im,patch):
+#     f = torch.sqrt(im.min())
+#     refined_patch = torchvision.transforms.functional.adjust_brightness(patch,1.5) * (1-f) + f
+#     return refined_patch
 
 def foggy(img):
     return img/2 + 0.5
 
 def eot_ver2(im,patch):
     f = torch.sqrt(im.min())
-    refined_patch = torchvision.transforms.functional.adjust_brightness(patch,1.5) * (1-f) + f
+    bri = random.uniform(1.2,1.8)
+    refined_patch = torchvision.transforms.functional.adjust_brightness(patch,bri) * (1-f) + f
     return refined_patch
 
 

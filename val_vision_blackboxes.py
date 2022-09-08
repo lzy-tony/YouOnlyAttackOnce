@@ -153,7 +153,7 @@ def run(opt):
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="cuda:0", help="cuda device")
+    parser.add_argument("--device", type=str, default="cuda:1", help="cuda device")
     
     # models
     parser.add_argument("--faster_rcnn", type=int, default=1, help="val faster-rcnn")
